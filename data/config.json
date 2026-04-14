@@ -1,0 +1,21 @@
+{
+  "scoring": {
+    "levelThresholds": {
+      "L": [2, 3],
+      "M": [4, 4],
+      "H": [5, 6]
+    },
+    "fallbackThreshold": 60
+  },
+  "display": {
+    "title": "光遇人格测试",
+    "subtitle": "MBTI已经过时，SkyTi来了",
+    "introBg": "#0a0f1e",
+    "accentColor": "#FFD966",
+    "secondaryColor": "#7EC8E3",
+    "font": "system-ui, sans-serif",
+    "disclaimer": "本测试仅供娱乐，与游戏官方无关",
+    "totalQuestions": 30,
+    "topN": 5
+  }
+}
