@@ -9,7 +9,19 @@ import config from '../data/config.json' assert { type: 'json' }
 
 const { standard, special } = types
 const { display } = config
-const allQuestions = questions.main
+
+// 随机洗牌函数
+function shuffleArray(array) {
+  const arr = [...array]
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
+// 每次加载随机抽取题目
+const allQuestions = shuffleArray(questions.main)
 const dimOrder = ['S1','S2','S3','E1','E2','E3','A1','A2','A3','Ac1','Ac2','Ac3','So1','So2','So3']
 
 let currentIndex = 0
