@@ -223,14 +223,6 @@ body::before {
 
 .option-btn:active { transform: translateX(2px); }
 
-.option-btn.selected {
-  border-color: var(--accent);
-  background: #FFD96615;
-  color: var(--accent);
-  font-weight: 600;
-  box-shadow: 0 0 12px #FFD96620;
-}
-
 /* 答题导航 */
 .quiz-nav {
   display: flex;

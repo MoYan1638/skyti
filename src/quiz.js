@@ -26,7 +26,6 @@ const dimOrder = ['S1','S2','S3','E1','E2','E3','A1','A2','A3','Ac1','Ac2','Ac3'
 
 let currentIndex = 0
 let answers = {}
-let currentSelectedValue = null
 
 /* ─── 页面切换 ─── */
 export function showPage(id) {
@@ -39,7 +38,6 @@ export function showPage(id) {
 document.getElementById('btn-start')?.addEventListener('click', () => {
   currentIndex = 0
   answers = {}
-  currentSelectedValue = null
   showPage('quiz')
 })
 document.getElementById('btn-prev')?.addEventListener('click', () => {
@@ -49,13 +47,6 @@ document.getElementById('btn-prev')?.addEventListener('click', () => {
   }
 })
 document.getElementById('btn-next')?.addEventListener('click', () => {
-  const q = allQuestions[currentIndex]
-  if (currentSelectedValue == null) {
-    showToast('请先选择一个选项')
-    return
-  }
-  answers[q.id] = currentSelectedValue
-  currentSelectedValue = null
   if (currentIndex < allQuestions.length - 1) {
     currentIndex++
     renderQuestion()
@@ -73,21 +64,13 @@ function renderQuestion() {
   document.getElementById('progress-text').textContent =
     `${currentIndex + 1} / ${allQuestions.length}`
 
-  // 恢复已选状态
-  currentSelectedValue = answers[q.id] ?? null
-
   const optsEl = document.getElementById('options')
   optsEl.innerHTML = ''
-  q.options.forEach((opt, i) => {
+  q.options.forEach(opt => {
     const btn = document.createElement('button')
     btn.className = 'option-btn'
-    if (opt.value === currentSelectedValue) btn.classList.add('selected')
     btn.textContent = opt.label
-    btn.addEventListener('click', () => {
-      currentSelectedValue = opt.value
-      optsEl.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'))
-      btn.classList.add('selected')
-    })
+    btn.addEventListener('click', () => selectOption(q.id, opt.value))
     optsEl.appendChild(btn)
   })
 
@@ -97,6 +80,16 @@ function renderQuestion() {
   prevBtn.style.visibility = currentIndex > 0 ? 'visible' : 'hidden'
   nextBtn.style.visibility = 'visible'
   nextBtn.textContent = currentIndex < allQuestions.length - 1 ? '下一题 →' : '查看结果 ✨'
+}
+
+function selectOption(qId, value) {
+  answers[qId] = value
+  if (currentIndex < allQuestions.length - 1) {
+    currentIndex++
+    renderQuestion()
+  } else {
+    showPage('result')
+  }
 }
 
 /* ─── 结果渲染 ─── */
