@@ -47,6 +47,11 @@ document.getElementById('btn-prev')?.addEventListener('click', () => {
   }
 })
 document.getElementById('btn-next')?.addEventListener('click', () => {
+  const q = allQuestions[currentIndex]
+  if (answers[q.id] == null) {
+    showToast('请先选择一个选项')
+    return
+  }
   if (currentIndex < allQuestions.length - 1) {
     currentIndex++
     renderQuestion()
