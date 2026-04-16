@@ -223,6 +223,54 @@ body::before {
 
 .option-btn:active { transform: translateX(2px); }
 
+.option-btn.selected {
+  border-color: var(--accent);
+  background: #FFD96615;
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 0 12px #FFD96620;
+}
+
+/* 答题导航 */
+.quiz-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.btn-nav {
+  border: none;
+  border-radius: 50px;
+  padding: 12px 24px;
+  font-size: 0.9rem;
+  font-family: var(--font);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  background: var(--bg-card-alt);
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+}
+
+.btn-nav:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
+  background: #1a2a5060;
+}
+
+.btn-nav:last-child {
+  background: linear-gradient(135deg, #FFD966, #FFB347);
+  color: #0a0f1e;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.btn-nav:last-child:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px #FFD96640;
+}
+
 /* 结果页 */
 .result-card {
   text-align: center;

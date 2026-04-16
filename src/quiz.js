@@ -26,6 +26,7 @@ const dimOrder = ['S1','S2','S3','E1','E2','E3','A1','A2','A3','Ac1','Ac2','Ac3'
 
 let currentIndex = 0
 let answers = {}
+let currentSelectedValue = null
 
 /* ─── 页面切换 ─── */
 export function showPage(id) {
@@ -35,36 +36,67 @@ export function showPage(id) {
 }
 
 /* ─── 开始 ─── */
-document.getElementById('btn-start')?.addEventListener('click', () => showPage('quiz'))
+document.getElementById('btn-start')?.addEventListener('click', () => {
+  currentIndex = 0
+  answers = {}
+  currentSelectedValue = null
+  showPage('quiz')
+})
+document.getElementById('btn-prev')?.addEventListener('click', () => {
+  if (currentIndex > 0) {
+    currentIndex--
+    renderQuestion()
+  }
+})
+document.getElementById('btn-next')?.addEventListener('click', () => {
+  const q = allQuestions[currentIndex]
+  if (currentSelectedValue == null) {
+    showToast('请先选择一个选项')
+    return
+  }
+  answers[q.id] = currentSelectedValue
+  currentSelectedValue = null
+  if (currentIndex < allQuestions.length - 1) {
+    currentIndex++
+    renderQuestion()
+  } else {
+    showPage('result')
+  }
+})
 renderQuestion()
 
 function renderQuestion() {
   const q = allQuestions[currentIndex]
   document.getElementById('question-text').textContent = q.text
   document.getElementById('progress-fill').style.width =
-    ((currentIndex) / allQuestions.length * 100) + '%'
+    (currentIndex / allQuestions.length * 100) + '%'
   document.getElementById('progress-text').textContent =
     `${currentIndex + 1} / ${allQuestions.length}`
 
+  // 恢复已选状态
+  currentSelectedValue = answers[q.id] ?? null
+
   const optsEl = document.getElementById('options')
   optsEl.innerHTML = ''
-  q.options.forEach(opt => {
+  q.options.forEach((opt, i) => {
     const btn = document.createElement('button')
     btn.className = 'option-btn'
+    if (opt.value === currentSelectedValue) btn.classList.add('selected')
     btn.textContent = opt.label
-    btn.addEventListener('click', () => selectOption(q.id, opt.value))
+    btn.addEventListener('click', () => {
+      currentSelectedValue = opt.value
+      optsEl.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'))
+      btn.classList.add('selected')
+    })
     optsEl.appendChild(btn)
   })
-}
 
-function selectOption(qId, value) {
-  answers[qId] = value
-  currentIndex++
-  if (currentIndex < allQuestions.length) {
-    renderQuestion()
-  } else {
-    showPage('result')
-  }
+  // 导航按钮状态
+  const prevBtn = document.getElementById('btn-prev')
+  const nextBtn = document.getElementById('btn-next')
+  prevBtn.style.visibility = currentIndex > 0 ? 'visible' : 'hidden'
+  nextBtn.style.visibility = 'visible'
+  nextBtn.textContent = currentIndex < allQuestions.length - 1 ? '下一题 →' : '查看结果 ✨'
 }
 
 /* ─── 结果渲染 ─── */
