@@ -1,16 +1,16 @@
-/**
- * SkyTi — 答题流程 + 结果渲染
+﻿/**
+ * SkyTi 鈥?绛旈娴佺▼ + 缁撴灉娓叉煋
  */
 import { calcDimensionScores, scoresToLevels, matchAllTypes } from './engine.js'
 import { drawRadarChart } from './chart.js'
-import questions from '../data/questions.json' assert { type: 'json' }
-import types from '../data/types.json' assert { type: 'json' }
-import config from '../data/config.json' assert { type: 'json' }
+import questions from '../data/questions.js'
+import types from '../data/types.js'
+import config from '../data/config.js'
 
 const { standard, special } = types
 const { display } = config
 
-// 随机洗牌函数
+// 闅忔満娲楃墝鍑芥暟
 function shuffleArray(array) {
   const arr = [...array]
   for (let i = arr.length - 1; i > 0; i--) {
@@ -20,21 +20,21 @@ function shuffleArray(array) {
   return arr
 }
 
-// 每次加载随机抽取题目
+// 姣忔鍔犺浇闅忔満鎶藉彇棰樼洰
 const allQuestions = shuffleArray(questions.main)
 const dimOrder = ['S1','S2','S3','E1','E2','E3','A1','A2','A3','Ac1','Ac2','Ac3','So1','So2','So3']
 
 let currentIndex = 0
 let answers = {}
 
-/* ─── 页面切换 ─── */
+/* 鈹€鈹€鈹€ 椤甸潰鍒囨崲 鈹€鈹€鈹€ */
 export function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
   document.getElementById('page-' + id)?.classList.add('active')
   if (id === 'result') renderResult()
 }
 
-/* ─── 开始 ─── */
+/* 鈹€鈹€鈹€ 寮€濮?鈹€鈹€鈹€ */
 document.getElementById('btn-start')?.addEventListener('click', () => {
   currentIndex = 0
   answers = {}
@@ -49,7 +49,7 @@ document.getElementById('btn-prev')?.addEventListener('click', () => {
 document.getElementById('btn-next')?.addEventListener('click', () => {
   const q = allQuestions[currentIndex]
   if (answers[q.id] == null) {
-    showToast('请先选择一个选项')
+    showToast('璇峰厛閫夋嫨涓€涓€夐」')
     return
   }
   if (currentIndex < allQuestions.length - 1) {
@@ -79,12 +79,12 @@ function renderQuestion() {
     optsEl.appendChild(btn)
   })
 
-  // 导航按钮状态
+  // 瀵艰埅鎸夐挳鐘舵€?
   const prevBtn = document.getElementById('btn-prev')
   const nextBtn = document.getElementById('btn-next')
   prevBtn.style.visibility = currentIndex > 0 ? 'visible' : 'hidden'
   nextBtn.style.visibility = 'visible'
-  nextBtn.textContent = currentIndex < allQuestions.length - 1 ? '下一题 →' : '查看结果 ✨'
+  nextBtn.textContent = currentIndex < allQuestions.length - 1 ? '涓嬩竴棰?鈫? : '鏌ョ湅缁撴灉 鉁?
 }
 
 function selectOption(qId, value) {
@@ -97,7 +97,7 @@ function selectOption(qId, value) {
   }
 }
 
-/* ─── 结果渲染 ─── */
+/* 鈹€鈹€鈹€ 缁撴灉娓叉煋 鈹€鈹€鈹€ */
 function renderResult() {
   const scores = calcDimensionScores(answers, allQuestions)
   const levels = scoresToLevels(scores, config.scoring.levelThresholds)
@@ -110,30 +110,30 @@ function renderResult() {
   document.getElementById('result-desc').textContent = primary.desc
   document.getElementById('result-badge').textContent = primary.badge || ''
 
-  // 次要匹配
+  // 娆¤鍖归厤
   const secondaryEl = document.getElementById('result-secondary')
   if (matched[1]) {
     secondaryEl.style.display = 'block'
     document.getElementById('secondary-info').textContent =
-      `${matched[1].cn}（${matched[1].code}）— 相似度 ${matched[1].similarity}%`
+      `${matched[1].cn}锛?{matched[1].code}锛夆€?鐩镐技搴?${matched[1].similarity}%`
   } else {
     secondaryEl.style.display = 'none'
   }
 
-  // 雷达图
+  // 闆疯揪鍥?
   const canvas = document.getElementById('radar-chart')
   const userVec = dimOrder.map(d => ({ L: 1, M: 2, H: 3 }[levels[d]]))
   drawRadarChart(canvas, dimOrder, userVec)
 
-  // 维度详情
+  // 缁村害璇︽儏
   const dimNames = {
-    S1:'光之自信', S2:'内心清晰', S3:'光之追求',
-    E1:'羁绊安全', E2:'情感投入', E3:'边界独处',
-    A1:'社交主动', A2:'包容耐心', A3:'攀比竞争',
-    Ac1:'探索冒险', Ac2:'目标规划', Ac3:'效率过程',
-    So1:'主动社交', So2:'社交广度', So3:'给予分享'
+    S1:'鍏変箣鑷俊', S2:'鍐呭績娓呮櫚', S3:'鍏変箣杩芥眰',
+    E1:'缇佺粖瀹夊叏', E2:'鎯呮劅鎶曞叆', E3:'杈圭晫鐙',
+    A1:'绀句氦涓诲姩', A2:'鍖呭鑰愬績', A3:'鏀€姣旂珵浜?,
+    Ac1:'鎺㈢储鍐掗櫓', Ac2:'鐩爣瑙勫垝', Ac3:'鏁堢巼杩囩▼',
+    So1:'涓诲姩绀句氦', So2:'绀句氦骞垮害', So3:'缁欎簣鍒嗕韩'
   }
-  const levelNames = { L: '低', M: '中', H: '高' }
+  const levelNames = { L: '浣?, M: '涓?, H: '楂? }
   const detailEl = document.getElementById('dimensions-detail')
   detailEl.innerHTML = ''
   dimOrder.forEach(dim => {
@@ -159,10 +159,10 @@ function renderResult() {
     topEl.appendChild(div)
   })
 
-  // 免责声明
+  // 鍏嶈矗澹版槑
   document.getElementById('disclaimer').textContent = display.disclaimer
 
-  // 按钮事件
+  // 鎸夐挳浜嬩欢
   document.getElementById('btn-restart')?.addEventListener('click', restart)
   document.getElementById('btn-download')?.addEventListener('click', downloadResult)
   document.getElementById('btn-agent')?.addEventListener('click', copyAgent)
@@ -179,14 +179,14 @@ function downloadResult() {
   if (!canvas) return
   const url = canvas.toDataURL('image/png')
   const a = document.createElement('a')
-  a.download = 'SkyTi结果.png'
+  a.download = 'SkyTi缁撴灉.png'
   a.href = url
   a.click()
 }
 
 function copyAgent() {
   const cmd = 'git clone https://github.com/YOUR_NAME/SkyTi.git && cd SkyTi && npm install && npm run dev'
-  navigator.clipboard?.writeText(cmd).then(() => showToast('已复制！'))
+  navigator.clipboard?.writeText(cmd).then(() => showToast('宸插鍒讹紒'))
 }
 
 function showToast(msg) {
@@ -196,3 +196,5 @@ function showToast(msg) {
   document.body.appendChild(t)
   setTimeout(() => t.remove(), 2200)
 }
+
+
