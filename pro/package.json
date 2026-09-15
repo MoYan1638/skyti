@@ -1,0 +1,17 @@
+{
+  "name": "skyti-pro",
+  "version": "1.0.0",
+  "description": "完整版光遇人格测试 · 52道题全方位解读",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.0"
+  }
+}

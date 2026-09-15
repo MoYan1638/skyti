@@ -1,0 +1,33 @@
+{
+  "scoring": {
+    "levelThresholds": {
+      "L": [
+        3,
+        4
+      ],
+      "M": [
+        5,
+        5
+      ],
+      "H": [
+        6,
+        7
+      ]
+    },
+    "fallbackThreshold": 30
+  },
+  "display": {
+    "title": "SkyTi · Pro",
+    "subtitle": "52道题，全方位解读你的光遇人格",
+    "introBg": "#0a0f1e",
+    "accentColor": "#FFD966",
+    "secondaryColor": "#7EC8E3",
+    "font": "system-ui, sans-serif",
+    "disclaimer": "本测试仅供娱乐，与游戏官方无关",
+    "totalQuestions": 52,
+    "topN": 3
+  },
+  "title": "SkyTi · Pro",
+  "questionCount": 52,
+  "version": "pro"
+}
