@@ -1,0 +1,15 @@
+# Dependencies
+**/node_modules/
+
+# Build outputs
+**/dist/
+
+# Vercel local state
+**/.vercel/
+
+# OS / editor
+**/.DS_Store
+**/Thumbs.db
+
+# Logs
+**/*.log
