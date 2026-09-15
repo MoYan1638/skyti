@@ -1,0 +1,33 @@
+{
+  "scoring": {
+    "levelThresholds": {
+      "L": [
+        1,
+        1
+      ],
+      "M": [
+        2,
+        2
+      ],
+      "H": [
+        3,
+        3
+      ]
+    },
+    "fallbackThreshold": 30
+  },
+  "display": {
+    "title": "SkyTi · Demo",
+    "subtitle": "15道题，快速了解你的光遇人格",
+    "introBg": "#0a0f1e",
+    "accentColor": "#FFD966",
+    "secondaryColor": "#7EC8E3",
+    "font": "system-ui, sans-serif",
+    "disclaimer": "本测试仅供娱乐，与游戏官方无关",
+    "totalQuestions": 15,
+    "topN": 3
+  },
+  "title": "SkyTi · Demo",
+  "questionCount": 15,
+  "version": "demo"
+}
