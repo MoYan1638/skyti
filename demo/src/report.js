@@ -1,9 +1,10 @@
 /**
  * SkyTi — 匿名结果上报（用于收集真实稀有度 + 携带意见反馈）
- * 每次测试出结果上报一条记录：{code, cn, levels, v, ts, feedback}
+ * 每次测试出结果上报一条记录：{code, cn, levels, v, ts, uid, feedback}
+ * uid 是随机生成的匿名设备标识（只存在本机 localStorage），用于把同一人的多次答题归组。
  * feedback 默认为「无反馈」；用户提交反馈后，按 ts 定位本条记录并更新。
  * 后端：自建轻量接口（skyti-api，https://api.moyan06.icu）
- *   POST / {action:"report", code, cn, levels, v, ts, feedback}
+ *   POST / {action:"report", code, cn, levels, v, ts, uid, feedback}
  *   POST / {action:"feedback", ts, feedback}
  *   GET  /?action=stats
  * 未配置（stats.enabled=false）时静默跳过，不影响测试。
@@ -12,6 +13,7 @@
 import config from './data/config.json' with { type: 'json' }
 
 const stats = config.stats || {}
+const UID_KEY = 'skyti_uid_v1'
 const QUEUE_KEY = 'skyti_report_queue_v1'
 const RETRY_KEY = 'skyti_fb_retry_v1'
 const PENDING_KEY = 'skyti_feedback_pending_v1'
@@ -22,6 +24,18 @@ let lastTs = null
 
 function isFriendMode() {
   return !!new URLSearchParams(location.search).get('f')
+}
+
+/** 匿名设备标识：同一浏览器多次答题归为同一人（看板按此分组）。不含任何个人信息。 */
+function getUid() {
+  try {
+    let id = localStorage.getItem(UID_KEY)
+    if (!id) {
+      id = 'u' + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 7)
+      localStorage.setItem(UID_KEY, id)
+    }
+    return id
+  } catch (e) { return '' }
 }
 
 function configured() {
@@ -101,6 +115,7 @@ export function reportResult(primary, levelsStr) {
     levels: levelsStr || '',
     v: config.display.version || 'standard',
     ts,
+    uid: getUid(),
     feedback: fb
   }
   if (!configured()) return

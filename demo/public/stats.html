@@ -65,6 +65,18 @@
   .rec-del:hover { background:rgba(255,120,120,.15); }
   .rec-del:disabled { opacity:.5; cursor:default; }
   .rec-more { text-align:center; color:var(--dim); font-size:.75em; padding-top:10px; }
+  .grp { border:1px solid rgba(126,200,227,.16); border-radius:10px; margin-bottom:10px; overflow:hidden; }
+  .grp-head { display:flex; align-items:center; gap:8px; padding:8px 10px; cursor:pointer;
+              background:rgba(6,12,26,.45); font-size:.78em; user-select:none; }
+  .grp-head:hover { background:rgba(6,12,26,.7); }
+  .grp-arrow { color:var(--blue); transition:transform .2s; }
+  .grp.fold .grp-arrow { transform:rotate(-90deg); }
+  .grp-id { color:var(--gold); font-variant-numeric:tabular-nums; }
+  .grp-n { color:#8BA4CC; }
+  .grp-latest { margin-left:auto; color:#5a6f95; font-size:.92em; white-space:nowrap; }
+  .grp-del { margin-left:8px; }
+  .grp-body { padding:2px 10px 4px; }
+  .grp.fold .grp-body { display:none; }
   .card-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
   .foot { text-align:center; color:#5a6f95; font-size:.72em; margin-top:30px; }
 </style>
@@ -88,6 +100,7 @@
     <div class="card stats-row">
       <div><div class="stats-num" id="num-total">–</div><div class="stats-label">累计样本</div></div>
       <div><div class="stats-num" id="num-types">–</div><div class="stats-label">覆盖人格数 / 28</div></div>
+      <div><div class="stats-num" id="num-users">–</div><div class="stats-label">独立旅人</div></div>
       <div><div class="stats-num" id="num-today">–</div><div class="stats-label">今日新增</div></div>
     </div>
     <div class="card">
@@ -170,65 +183,148 @@ function renderFeedback(rows) {
   fbs.forEach(r => {
     const div = document.createElement('div')
     div.style.cssText = 'font-size:.8em;color:#c9d6ee;margin-bottom:8px;line-height:1.5'
-    div.textContent = `【${r.code} · ${VERSIONS[r.v] || r.v || '?'} · ${fmtTime(r.ts)}】${r.feedback}`
+    div.textContent = `【${r.code} · ${VERSIONS[r.v] || r.v || '?'} · ${fmtTime(r.ts)} · ${r.uid ? '旅人 ' + String(r.uid).slice(-6) : '未标记'}】${r.feedback}`
     list.appendChild(div)
   })
 }
 
-/** 记录明细：每条都带到达时间，可单条删除（删自己的测试数据用） */
+/** 记录明细：同一人的多次答题归为一组，组内按时间倒序，可单条/整组删除 */
+let folded = {}
+const GROUP_LIMIT = 60
+const REC_PER_GROUP = 20
+
+function uidKey(r) { return r.uid ? String(r.uid) : '__legacy__' }
+
+/** 按匿名 uid 分组，组间按最近答题时间倒序 */
+function groupRows(rows) {
+  const m = new Map()
+  rows.forEach(r => {
+    const k = uidKey(r)
+    if (!m.has(k)) m.set(k, [])
+    m.get(k).push(r)
+  })
+  return [...m.entries()].map(([k, items]) => {
+    items.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
+    return { key: k, items, latest: Number(items[0].ts) || 0 }
+  }).sort((a, b) => b.latest - a.latest)
+}
+
+function recordEl(r) {
+  const div = document.createElement('div')
+  div.className = 'rec'
+  const fb = r.feedback && r.feedback !== '无反馈'
+    ? `<span class="rec-fb">💬 ${esc(r.feedback)}</span>` : ''
+  div.innerHTML = `<span class="rec-time">${fmtTime(r.ts)}</span>
+    <span class="rec-main"><b>${esc(r.cn || '未知')}</b> <em>${esc(r.code || '')}</em> · <i>${esc(VERSIONS[r.v] || r.v || '?')}</i>${fb}</span>`
+  const btn = document.createElement('button')
+  btn.className = 'rec-del'
+  btn.textContent = '删除'
+  btn.onclick = () => delRecord(r.ts, btn)
+  div.appendChild(btn)
+  return div
+}
+
+function groupEl(g, items) {
+  const legacy = g.key === '__legacy__'
+  const box = document.createElement('div')
+  box.className = 'grp' + (folded[g.key] ? ' fold' : '')
+
+  const head = document.createElement('div')
+  head.className = 'grp-head'
+  head.innerHTML = `<span class="grp-arrow">▾</span>
+    <span class="grp-id">${legacy ? '❔ 未标记（旧数据）' : '👤 旅人 ' + esc(g.key.slice(-6))}</span>
+    <span class="grp-n">· ${g.items.length} 次答题</span>
+    <span class="grp-latest">最近 ${fmtTime(g.latest)}</span>`
+  head.onclick = () => {
+    folded[g.key] = !folded[g.key]
+    box.classList.toggle('fold', !!folded[g.key])
+  }
+  if (!legacy) {
+    const del = document.createElement('button')
+    del.className = 'rec-del grp-del'
+    del.textContent = '删除整组'
+    del.onclick = e => { e.stopPropagation(); delGroup(g.key, g.items, del) }
+    head.appendChild(del)
+  }
+
+  const body = document.createElement('div')
+  body.className = 'grp-body'
+  items.forEach(r => body.appendChild(recordEl(r)))
+  if (items.length < g.items.length) {
+    const m = document.createElement('div')
+    m.className = 'rec-more'
+    m.textContent = `本组还有 ${g.items.length - items.length} 条更早的记录（用「导出 CSV」看全部）`
+    body.appendChild(m)
+  }
+  box.appendChild(head)
+  box.appendChild(body)
+  return box
+}
+
 function renderRecords(rows) {
   const card = $('rec-card'), list = $('rec-list'), more = $('rec-more')
-  const sorted = rows.slice().sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
+  const groups = groupRows(rows)
   card.style.display = 'block'
-  $('rec-count').textContent = `${sorted.length} 条` + (curVer === 'all' ? '' : ` · ${VERSIONS[curVer]}`)
+  $('rec-count').textContent = `${rows.length} 条 · ${groups.length} 位旅人` +
+    (curVer === 'all' ? '' : ` · ${VERSIONS[curVer]}`)
   list.innerHTML = ''
-  if (!sorted.length) {
+  if (!rows.length) {
     list.innerHTML = '<div class="empty">暂无记录 ✨</div>'
     more.style.display = 'none'
     return
   }
-  sorted.slice(0, REC_LIMIT).forEach(r => {
-    const div = document.createElement('div')
-    div.className = 'rec'
-    const fb = r.feedback && r.feedback !== '无反馈'
-      ? `<span class="rec-fb">💬 ${esc(r.feedback)}</span>` : ''
-    div.innerHTML = `<span class="rec-time">${fmtTime(r.ts)}</span>
-      <span class="rec-main"><b>${esc(r.cn || '未知')}</b> <em>${esc(r.code || '')}</em> · <i>${esc(VERSIONS[r.v] || r.v || '?')}</i>${fb}</span>`
-    const btn = document.createElement('button')
-    btn.className = 'rec-del'
-    btn.textContent = '删除'
-    btn.onclick = () => delRecord(r.ts, btn)
-    div.appendChild(btn)
-    list.appendChild(div)
-  })
-  if (sorted.length > REC_LIMIT) {
+  let shown = 0, gShown = 0
+  for (const g of groups) {
+    if (shown >= REC_LIMIT || gShown >= GROUP_LIMIT) break
+    const take = g.items.slice(0, Math.min(REC_PER_GROUP, REC_LIMIT - shown))
+    shown += take.length
+    gShown++
+    list.appendChild(groupEl(g, take))
+  }
+  const rest = rows.length - shown
+  if (rest > 0 || groups.length > gShown) {
     more.style.display = 'block'
-    more.textContent = `仅显示最新 ${REC_LIMIT} 条（共 ${sorted.length} 条，全部数据可用「导出 CSV」查看）`
+    more.textContent = `已显示 ${gShown} 位旅人 / 共 ${groups.length} 位、${shown} 条 / 共 ${rows.length} 条（全部数据可用「导出 CSV」查看）`
   } else {
     more.style.display = 'none'
   }
 }
 
+async function postDelete(body, btn, busyText) {
+  const old = btn.textContent
+  btn.disabled = true
+  btn.textContent = busyText
+  const r = await fetch(`${cfg.apiBase}/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ action: 'delete', key: cfg.key }, body))
+  })
+  const data = await r.json()
+  if (!data.ok) { btn.disabled = false; btn.textContent = old; throw new Error(data.error || '删除失败') }
+  return data
+}
+
 async function delRecord(ts, btn) {
   if (!ts) { alert('这条记录没有时间戳，无法删除'); return }
   if (!confirm(`确定删除这条记录吗？\n${fmtTime(ts)}\n删除后不可恢复。`)) return
-  btn.disabled = true
-  btn.textContent = '删除中…'
   try {
-    const r = await fetch(`${cfg.apiBase}/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', key: cfg.key, ts: Number(ts) })
-    })
-    const data = await r.json()
-    if (!data.ok) throw new Error(data.error || '删除失败')
+    await postDelete({ ts: Number(ts) }, btn, '删除中…')
     allRows = allRows.filter(x => Number(x.ts) !== Number(ts))
     render()
-  } catch (e) {
-    alert('删除失败：' + e.message)
-    btn.disabled = false
-    btn.textContent = '删除'
-  }
+  } catch (e) { alert('删除失败：' + e.message) }
+}
+
+async function delGroup(key, items, btn) {
+  const tsList = items.map(r => Number(r.ts)).filter(n => n > 0)
+  if (!tsList.length) { alert('这组记录没有时间戳，无法删除'); return }
+  if (!confirm(`确定删除「旅人 ${key.slice(-6)}」的全部 ${tsList.length} 条记录吗？\n删除后不可恢复。`)) return
+  try {
+    const data = await postDelete({ tsList }, btn, '删除中…')
+    const set = new Set(tsList)
+    allRows = allRows.filter(x => !set.has(Number(x.ts)))
+    render()
+    if (data.removed !== tsList.length) alert(`服务端实际删除 ${data.removed} 条（可能有记录已被删过）。`)
+  } catch (e) { alert('删除失败：' + e.message) }
 }
 
 function renderTrend(rows) {
@@ -264,6 +360,7 @@ function render() {
   $('num-total').textContent = total
   const agg = aggregate(rows)
   $('num-types').textContent = agg.length
+  $('num-users').textContent = new Set(rows.filter(r => r.uid).map(r => String(r.uid))).size
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
   $('num-today').textContent = allRows.filter(r => (r.ts || 0) >= todayStart.getTime()).length
 
@@ -364,10 +461,10 @@ $('btn-refresh').onclick = load
 $('btn-export').onclick = () => {
   if (!allRows.length) { alert('暂无数据可导出'); return }
   // UTF-8 BOM，保证 Excel 打开中文不乱码
-  const head = 'code,cn,version,levels,feedback,time'
+  const head = 'code,cn,user,version,levels,feedback,time'
   const csvEsc = v => `,"${String(v == null ? '' : v).replace(/"/g, '""')}"`
   const body = allRows.map(r => [
-    r.code, r.cn, r.v, r.levels, r.feedback || '无反馈',
+    r.code, r.cn, r.uid || '未标记', r.v, r.levels, r.feedback || '无反馈',
     fmtTime(r.ts)
   ].map(csvEsc).join('')).join('\n')
   const blob = new Blob(['\ufeff' + head + '\n' + body], { type: 'text/csv;charset=utf-8' })
