@@ -84,6 +84,17 @@ if (friendInfo) {
     fb.style.display = 'block'
   }
 }
+/* 版本切换器带上 ?f= 一起跳：好友测评模式换版本不能丢，
+   否则会被当成自测（还会把结果当成自己的上报） */
+if (friendRaw) {
+  document.querySelectorAll('.version-switcher a').forEach(a => {
+    try {
+      const u = new URL(a.getAttribute('href'), location.href)
+      u.searchParams.set('f', friendRaw)
+      a.setAttribute('href', u.toString())
+    } catch (e) { /* ignore */ }
+  })
+}
 
 /* ─── 页面切换 ─── */
 export function showPage(id) {
