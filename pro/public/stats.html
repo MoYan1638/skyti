@@ -51,6 +51,21 @@
   .legend u { text-decoration:none; display:inline-block; width:2px; height:10px; background:#fff;
               vertical-align:middle; margin:0 4px 0 12px; opacity:.65; }
   .empty { text-align:center; color:var(--dim); padding:30px 0; font-size:.9em; }
+  .rec { display:flex; align-items:center; gap:10px; padding:8px 0; font-size:.8em;
+         border-bottom:1px dashed rgba(126,200,227,.15); }
+  .rec:last-child { border-bottom:none; }
+  .rec-time { flex:0 0 auto; color:var(--gold); font-variant-numeric:tabular-nums; font-size:.95em; }
+  .rec-main { flex:1; min-width:0; color:#c9d6ee; line-height:1.45; }
+  .rec-main b { color:#fff; font-weight:normal; }
+  .rec-main em { font-style:normal; color:var(--dim); }
+  .rec-main i { font-style:normal; color:#7EC8E3; }
+  .rec-fb { display:block; color:#a8b8d8; font-size:.92em; margin-top:2px; }
+  .rec-del { flex:0 0 auto; background:transparent; border:1px solid rgba(255,120,120,.5);
+             color:#ff9b9b; border-radius:14px; padding:3px 10px; font-size:.78em; cursor:pointer; }
+  .rec-del:hover { background:rgba(255,120,120,.15); }
+  .rec-del:disabled { opacity:.5; cursor:default; }
+  .rec-more { text-align:center; color:var(--dim); font-size:.75em; padding-top:10px; }
+  .card-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
   .foot { text-align:center; color:#5a6f95; font-size:.72em; margin-top:30px; }
 </style>
 </head>
@@ -80,6 +95,14 @@
       <div id="list"></div>
       <div class="legend"><i></i>实测占比 <u></u>白线 = 模拟稀有度参考</div>
     </div>
+    <div class="card" id="rec-card" style="display:none">
+      <div class="card-head">
+        <div style="color:#FFD966;font-size:.85em;font-weight:bold">📋 记录明细</div>
+        <div id="rec-count" style="color:#8BA4CC;font-size:.72em"></div>
+      </div>
+      <div id="rec-list"></div>
+      <div class="rec-more" id="rec-more" style="display:none"></div>
+    </div>
     <div class="card" id="trend-card" style="display:none">
       <div style="color:#FFD966;font-size:.85em;font-weight:bold;margin-bottom:10px">📈 近 14 天答题趋势</div>
       <div id="trend"></div>
@@ -104,6 +127,19 @@ const VERSIONS = { all: '全部', standard: '标准版 30题', demo: 'Demo 15题
 let cfg = null, allRows = [], simMap = {}, curVer = 'all'
 
 const $ = id => document.getElementById(id)
+const REC_LIMIT = 200
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+/** 统一时间格式：2026-09-28 16:42:03 */
+function fmtTime(ts) {
+  if (!ts) return '—'
+  const d = new Date(Number(ts))
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
 
 function loadCfg() {
   try { return JSON.parse(localStorage.getItem(CFG_KEY) || 'null') } catch (e) { return null }
@@ -134,10 +170,65 @@ function renderFeedback(rows) {
   fbs.forEach(r => {
     const div = document.createElement('div')
     div.style.cssText = 'font-size:.8em;color:#c9d6ee;margin-bottom:8px;line-height:1.5'
-    const time = r.ts ? new Date(r.ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
-    div.textContent = `【${r.code} · ${VERSIONS[r.v] || r.v || '?'} · ${time}】${r.feedback}`
+    div.textContent = `【${r.code} · ${VERSIONS[r.v] || r.v || '?'} · ${fmtTime(r.ts)}】${r.feedback}`
     list.appendChild(div)
   })
+}
+
+/** 记录明细：每条都带到达时间，可单条删除（删自己的测试数据用） */
+function renderRecords(rows) {
+  const card = $('rec-card'), list = $('rec-list'), more = $('rec-more')
+  const sorted = rows.slice().sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
+  card.style.display = 'block'
+  $('rec-count').textContent = `${sorted.length} 条` + (curVer === 'all' ? '' : ` · ${VERSIONS[curVer]}`)
+  list.innerHTML = ''
+  if (!sorted.length) {
+    list.innerHTML = '<div class="empty">暂无记录 ✨</div>'
+    more.style.display = 'none'
+    return
+  }
+  sorted.slice(0, REC_LIMIT).forEach(r => {
+    const div = document.createElement('div')
+    div.className = 'rec'
+    const fb = r.feedback && r.feedback !== '无反馈'
+      ? `<span class="rec-fb">💬 ${esc(r.feedback)}</span>` : ''
+    div.innerHTML = `<span class="rec-time">${fmtTime(r.ts)}</span>
+      <span class="rec-main"><b>${esc(r.cn || '未知')}</b> <em>${esc(r.code || '')}</em> · <i>${esc(VERSIONS[r.v] || r.v || '?')}</i>${fb}</span>`
+    const btn = document.createElement('button')
+    btn.className = 'rec-del'
+    btn.textContent = '删除'
+    btn.onclick = () => delRecord(r.ts, btn)
+    div.appendChild(btn)
+    list.appendChild(div)
+  })
+  if (sorted.length > REC_LIMIT) {
+    more.style.display = 'block'
+    more.textContent = `仅显示最新 ${REC_LIMIT} 条（共 ${sorted.length} 条，全部数据可用「导出 CSV」查看）`
+  } else {
+    more.style.display = 'none'
+  }
+}
+
+async function delRecord(ts, btn) {
+  if (!ts) { alert('这条记录没有时间戳，无法删除'); return }
+  if (!confirm(`确定删除这条记录吗？\n${fmtTime(ts)}\n删除后不可恢复。`)) return
+  btn.disabled = true
+  btn.textContent = '删除中…'
+  try {
+    const r = await fetch(`${cfg.apiBase}/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', key: cfg.key, ts: Number(ts) })
+    })
+    const data = await r.json()
+    if (!data.ok) throw new Error(data.error || '删除失败')
+    allRows = allRows.filter(x => Number(x.ts) !== Number(ts))
+    render()
+  } catch (e) {
+    alert('删除失败：' + e.message)
+    btn.disabled = false
+    btn.textContent = '删除'
+  }
 }
 
 function renderTrend(rows) {
@@ -184,6 +275,7 @@ function render() {
 
   const maxN = agg.length ? agg[0][1].n : 1
   const list = $('list')
+  renderRecords(rows)
   renderFeedback(rows)
   renderTrend(rows)
   list.innerHTML = agg.length ? '' : '<div class="empty">暂无数据，去做个测试试试吧 ✨</div>'
@@ -273,11 +365,11 @@ $('btn-export').onclick = () => {
   if (!allRows.length) { alert('暂无数据可导出'); return }
   // UTF-8 BOM，保证 Excel 打开中文不乱码
   const head = 'code,cn,version,levels,feedback,time'
-  const esc = v => `,"${String(v == null ? '' : v).replace(/"/g, '""')}"`
+  const csvEsc = v => `,"${String(v == null ? '' : v).replace(/"/g, '""')}"`
   const body = allRows.map(r => [
     r.code, r.cn, r.v, r.levels, r.feedback || '无反馈',
-    r.ts ? new Date(r.ts).toLocaleString('zh-CN') : ''
-  ].map(esc).join('')).join('\n')
+    fmtTime(r.ts)
+  ].map(csvEsc).join('')).join('\n')
   const blob = new Blob(['\ufeff' + head + '\n' + body], { type: 'text/csv;charset=utf-8' })
   const a = document.createElement('a')
   a.download = `SkyTi-数据导出-${new Date().toISOString().slice(0, 10)}.csv`

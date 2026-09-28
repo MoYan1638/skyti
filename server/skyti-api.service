@@ -1,0 +1,13 @@
+[Unit]
+Description=SkyTi report/feedback API
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/skyti-api/skyti-api.js
+Restart=always
+RestartSec=3
+User=root
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
