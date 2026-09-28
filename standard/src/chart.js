@@ -11,7 +11,7 @@ const MODEL_LABELS = {
 
 const LEVEL_COLORS = { L: '#8899bb', M: '#7EC8E3', H: '#FFD966' }
 
-export function drawRadarChart(canvas, dimOrder, userVec) {
+export function drawRadarChart(canvas, dimOrder, userVec, scale = 1) {
   const ctx = canvas.getContext('2d')
   const W = canvas.width
   const H = canvas.height
@@ -61,9 +61,9 @@ export function drawRadarChart(canvas, dimOrder, userVec) {
   ctx.closePath()
   ctx.fillStyle = '#FFD96625'
   ctx.fill()
-  ctx.strokeStyle = '#FFD966'
-  ctx.lineWidth = 2
-  ctx.stroke()
+    ctx.strokeStyle = '#FFD966'
+    ctx.lineWidth = 2 * scale
+    ctx.stroke()
 
   // 数据点
   for (let i = 0; i < n; i++) {
@@ -72,22 +72,22 @@ export function drawRadarChart(canvas, dimOrder, userVec) {
     const x = cx + R * val * Math.cos(angle)
     const y = cy + R * val * Math.sin(angle)
     ctx.beginPath()
-    ctx.arc(x, y, 4, 0, Math.PI * 2)
+    ctx.arc(x, y, 4 * scale, 0, Math.PI * 2)
     ctx.fillStyle = '#FFD966'
     ctx.fill()
     ctx.strokeStyle = '#0d1830'
-    ctx.lineWidth = 2
+    ctx.lineWidth = 2 * scale
     ctx.stroke()
   }
 
   // 标签
-  ctx.font = '11px "PingFang SC", sans-serif'
+  ctx.font = `${11 * scale}px "PingFang SC", sans-serif`
   ctx.fillStyle = '#8BA4CC'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   for (let i = 0; i < n; i++) {
     const angle = (Math.PI * 2 * i / n) - Math.PI / 2
-    const labelR = R + 18
+    const labelR = R + 18 * scale
     const x = cx + labelR * Math.cos(angle)
     const y = cy + labelR * Math.sin(angle)
     ctx.fillText(dimOrder[i], x, y)
@@ -98,10 +98,10 @@ export function drawRadarChart(canvas, dimOrder, userVec) {
   modelOrder.forEach((m, mi) => {
     const idx = mi * 3 + 1
     const angle = (Math.PI * 2 * idx / n) - Math.PI / 2
-    const labelR = R + 32
+    const labelR = R + 32 * scale
     const x = cx + labelR * Math.cos(angle)
     const y = cy + labelR * Math.sin(angle)
-    ctx.font = 'bold 10px "PingFang SC", sans-serif'
+    ctx.font = `bold ${10 * scale}px "PingFang SC", sans-serif`
     ctx.fillStyle = '#FFD96680'
     ctx.fillText(MODEL_LABELS[m], x, y)
   })

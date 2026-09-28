@@ -11,11 +11,13 @@ export function calcDimensionScores(answers, questions) {
   return scores
 }
 
-export function scoresToLevels(scores, thresholds) {
+export function scoresToLevels(scores, fractions, questionCounts) {
   const levels = {}
   for (const [dim, score] of Object.entries(scores)) {
-    if (score <= thresholds.L[1]) levels[dim] = 'L'
-    else if (score >= thresholds.H[0]) levels[dim] = 'H'
+    // 每维满分 = 题数 × 2；阈值按比例动态计算，适配 15/30/52 等不同抽题规模
+    const max = (questionCounts[dim] || 1) * 2
+    if (score <= max * fractions.L) levels[dim] = 'L'
+    else if (score >= max * fractions.H) levels[dim] = 'H'
     else levels[dim] = 'M'
   }
   return levels

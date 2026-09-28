@@ -1,0 +1,9 @@
+03:47:15.228969 http.c:938              == Info: Couldn't find host github.com in the .netrc file; using defaults
+03:47:15.282502 http.c:938              == Info: Host github.com:443 was resolved.
+03:47:15.284499 http.c:938              == Info: IPv6: (none)
+03:47:15.286497 http.c:938              == Info: IPv4: 20.205.243.166
+03:47:15.287499 http.c:938              == Info:   Trying 20.205.243.166:443...
+03:47:36.353873 http.c:938              == Info: connect to 20.205.243.166 port 443 from 0.0.0.0 port 56246 failed: Timed out
+03:47:36.354874 http.c:938              == Info: Failed to connect to github.com port 443 after 21125 ms: Could not connect to server
+03:47:36.356878 http.c:938              == Info: closing connection #0
+fatal: unable to access 'https://github.com/MoYan1638/skyti.git/': Failed to connect to github.com port 443 after 21125 ms: Could not connect to server

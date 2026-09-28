@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SkyTi · 数据看板</title>
+<meta name="robots" content="noindex, nofollow" />
+<style>
+  :root { --bg:#060c1a; --card:#0d1f42; --gold:#FFD966; --blue:#7EC8E3; --dim:#8BA4CC; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:linear-gradient(180deg,#060c1a 0%,#0d1f42 55%,#060c1a 100%); min-height:100vh;
+         color:#fff; font-family:system-ui,sans-serif; padding:24px 16px 60px; }
+  .wrap { max-width:720px; margin:0 auto; }
+  h1 { color:var(--gold); font-size:1.5em; text-align:center; margin-bottom:4px; }
+  .sub { text-align:center; color:var(--dim); font-size:.85em; margin-bottom:24px; }
+  .card { background:rgba(13,31,66,.55); border:1px solid rgba(126,200,227,.18);
+          border-radius:14px; padding:18px; margin-bottom:16px; }
+  label { display:block; font-size:.8em; color:var(--dim); margin:10px 0 4px; }
+  input { width:100%; padding:9px 12px; border-radius:8px; border:1px solid rgba(126,200,227,.3);
+          background:rgba(6,12,26,.7); color:#fff; font-size:.9em; }
+  .btn { display:inline-block; padding:9px 22px; margin-top:14px; border:none; border-radius:22px;
+         background:linear-gradient(135deg,#FFD966,#f5b942); color:#1a1405; font-weight:bold;
+         cursor:pointer; font-size:.9em; }
+  .btn.ghost { background:transparent; color:var(--blue); border:1px solid var(--blue); }
+  .hint { color:var(--dim); font-size:.78em; line-height:1.6; margin-top:10px; }
+  .hint code { background:rgba(6,12,26,.8); padding:1px 6px; border-radius:4px; color:var(--gold); }
+  .stats-row { display:flex; gap:12px; justify-content:space-around; text-align:center; flex-wrap:wrap; }
+  .stats-num { font-size:1.8em; color:var(--gold); font-weight:bold; }
+  .stats-label { font-size:.75em; color:var(--dim); }
+  .warn { background:rgba(255,217,102,.08); border:1px solid rgba(255,217,102,.3);
+          border-radius:10px; padding:10px 14px; font-size:.82em; color:var(--gold); margin-bottom:16px; }
+  .tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .tab { padding:6px 16px; border-radius:16px; font-size:.8em; cursor:pointer;
+         border:1px solid rgba(126,200,227,.35); color:var(--blue); background:transparent; }
+  .tab.on { background:var(--blue); color:#06263a; font-weight:bold; }
+  .row { margin-bottom:12px; }
+  .row-head { display:flex; justify-content:space-between; font-size:.85em; margin-bottom:4px; }
+  .row-name { color:#fff; } .row-name small { color:var(--dim); margin-left:6px; }
+  .row-val { color:var(--blue); } .row-val b { color:var(--gold); }
+  .bar-wrap { height:10px; border-radius:5px; background:rgba(6,12,26,.8); overflow:hidden; position:relative; }
+  .bar-real { height:100%; background:linear-gradient(90deg,#7EC8E3,#FFD966); border-radius:5px; }
+  .bar-sim { position:absolute; top:-2px; width:2px; height:14px; background:#fff; opacity:.65; }
+  .legend { font-size:.72em; color:var(--dim); margin-top:6px; }
+  .legend i { display:inline-block; width:14px; height:8px; border-radius:2px;
+              background:linear-gradient(90deg,#7EC8E3,#FFD966); vertical-align:middle; margin-right:4px; }
+  .legend u { text-decoration:none; display:inline-block; width:2px; height:10px; background:#fff;
+              vertical-align:middle; margin:0 4px 0 12px; opacity:.65; }
+  .empty { text-align:center; color:var(--dim); padding:30px 0; font-size:.9em; }
+  .foot { text-align:center; color:#5a6f95; font-size:.72em; margin-top:30px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>✦ SkyTi 数据看板</h1>
+  <p class="sub">真实稀有度统计 · 仅站长可见 · 数据为匿名结果（自建接口）</p>
+
+  <div id="setup" class="card" style="display:none">
+    <label>API 地址（默认已填好，不用改）</label>
+    <input id="in-base" value="https://api.moyan06.icu" />
+    <label>查看密钥（SKYTI_KEY，部署时设置的那个）</label>
+    <input id="in-key" placeholder="skyti-admin-..." />
+    <button class="btn" id="btn-save">保存并加载</button>
+    <p class="hint">配置只存在你当前浏览器的 localStorage 里，不会上传。</p>
+  </div>
+
+  <div id="board" style="display:none">
+    <div id="warn" class="warn" style="display:none"></div>
+    <div class="card stats-row">
+      <div><div class="stats-num" id="num-total">–</div><div class="stats-label">累计样本</div></div>
+      <div><div class="stats-num" id="num-types">–</div><div class="stats-label">覆盖人格数 / 28</div></div>
+      <div><div class="stats-num" id="num-today">–</div><div class="stats-label">今日新增</div></div>
+    </div>
+    <div class="card">
+      <div class="tabs" id="tabs"></div>
+      <div id="list"></div>
+      <div class="legend"><i></i>实测占比 <u></u>白线 = 模拟稀有度参考</div>
+    </div>
+    <div class="card" id="fb-card" style="display:none">
+      <div style="color:#FFD966;font-size:.85em;font-weight:bold;margin-bottom:10px">💬 最新意见反馈</div>
+      <div id="fb-list"></div>
+    </div>
+    <div style="text-align:center">
+      <button class="btn ghost" id="btn-refresh">↻ 刷新数据</button>
+      <button class="btn ghost" id="btn-export">⬇ 导出 CSV</button>
+      <button class="btn ghost" id="btn-logout">清除本机配置</button>
+    </div>
+  </div>
+
+  <p class="foot">SkyTi 数据看板 · sky墨言·出品</p>
+</div>
+
+<script>
+const CFG_KEY = 'skyti_stats_cfg_v1'
+const VERSIONS = { all: '全部', standard: '标准版 30题', demo: 'Demo 15题', pro: 'Pro 52题' }
+let cfg = null, allRows = [], simMap = {}, curVer = 'all'
+
+const $ = id => document.getElementById(id)
+
+function loadCfg() {
+  try { return JSON.parse(localStorage.getItem(CFG_KEY) || 'null') } catch (e) { return null }
+}
+
+async function fetchAll() {
+  const url = `${cfg.apiBase}/?action=stats&key=${encodeURIComponent(cfg.key)}`
+  const r = await fetch(url)
+  if (!r.ok) throw new Error('HTTP ' + r.status)
+  const data = await r.json()
+  if (!data.ok) throw new Error(data.error || '未知错误')
+  return data.records || []
+}
+
+function aggregate(rows) {
+  const m = {}
+  rows.forEach(r => { const k = r.code || '未知'; m[k] = m[k] || { cn: r.cn || '', n: 0 }; m[k].n++ })
+  return Object.entries(m).sort((a, b) => b[1].n - a[1].n)
+}
+
+function renderFeedback(rows) {
+  const fbs = rows.filter(r => r.feedback && r.feedback !== '无反馈').slice(0, 10)
+  const card = $('fb-card')
+  if (!fbs.length) { card.style.display = 'none'; return }
+  card.style.display = 'block'
+  const list = $('fb-list')
+  list.innerHTML = ''
+  fbs.forEach(r => {
+    const div = document.createElement('div')
+    div.style.cssText = 'font-size:.8em;color:#c9d6ee;margin-bottom:8px;line-height:1.5'
+    const time = r.ts ? new Date(r.ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
+    div.textContent = `【${r.code} · ${VERSIONS[r.v] || r.v || '?'} · ${time}】${r.feedback}`
+    list.appendChild(div)
+  })
+}
+
+function render() {
+  const rows = curVer === 'all' ? allRows : allRows.filter(r => r.v === curVer)
+  const total = rows.length
+  $('num-total').textContent = total
+  const agg = aggregate(rows)
+  $('num-types').textContent = agg.length
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  $('num-today').textContent = allRows.filter(r => (r.ts || 0) >= todayStart.getTime()).length
+
+  const warn = $('warn')
+  if (total < (cfg.minSample || 500)) {
+    warn.style.display = 'block'
+    warn.textContent = `⏳ 样本累积中：${total} / ${cfg.minSample || 500}。样本不足期间，结果页继续展示模拟稀有度，攒够后可切换为真实数据。`
+  } else { warn.style.display = 'none' }
+
+  const maxN = agg.length ? agg[0][1].n : 1
+  const list = $('list')
+  renderFeedback(rows)
+  list.innerHTML = agg.length ? '' : '<div class="empty">暂无数据，去做个测试试试吧 ✨</div>'
+  agg.forEach(([code, v], i) => {
+    const pct = (v.n / total * 100)
+    const sim = simMap[code]
+    // 参考线位置：把模拟占比换算成等比人数，再除以最大人数得到条内位置
+    let simMark = ''
+    if (sim) {
+      const simN = parseFloat(sim) / 100 * total
+      simMark = `<div class="bar-sim" style="left:${Math.min(100, simN / maxN * 100).toFixed(1)}%"></div>`
+    }
+    const div = document.createElement('div')
+    div.className = 'row'
+    div.innerHTML = `
+      <div class="row-head">
+        <span class="row-name">#${i + 1} ${code}<small>${v.cn}</small></span>
+        <span class="row-val"><b>${pct.toFixed(1)}%</b> · ${v.n} 人${sim ? ` <small style="color:#8BA4CC">(模拟 ${sim})</small>` : ''}</span>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-real" style="width:${(v.n / maxN * 100).toFixed(1)}%"></div>
+        ${simMark}
+      </div>`
+    list.appendChild(div)
+  })
+}
+
+function renderTabs() {
+  const tabs = $('tabs')
+  tabs.innerHTML = ''
+  Object.entries(VERSIONS).forEach(([k, label]) => {
+    const b = document.createElement('button')
+    b.className = 'tab' + (k === curVer ? ' on' : '')
+    b.textContent = label
+    b.onclick = () => { curVer = k; renderTabs(); render() }
+    tabs.appendChild(b)
+  })
+}
+
+async function load() {
+  try {
+    $('btn-refresh').textContent = '加载中…'
+    allRows = await fetchAll()
+    $('btn-refresh').textContent = '↻ 刷新数据'
+    render()
+  } catch (e) {
+    $('btn-refresh').textContent = '↻ 刷新数据'
+    alert('加载失败：' + e.message + '\n请检查 API 地址与查看密钥是否正确。')
+  }
+}
+
+function boot() {
+  cfg = loadCfg()
+  // 支持 ?key=xxx 直达（方便站长收藏带密钥的链接）
+  const urlKey = new URLSearchParams(location.search).get('key')
+  if (urlKey && (!cfg || cfg.key !== urlKey)) {
+    cfg = Object.assign(cfg || { apiBase: 'https://api.moyan06.icu' }, { key: urlKey })
+    localStorage.setItem(CFG_KEY, JSON.stringify(cfg))
+  }
+  if (!cfg) {
+    $('setup').style.display = 'block'
+    return
+  }
+  $('board').style.display = 'block'
+  $('in-base').value = cfg.apiBase || 'https://api.moyan06.icu'; $('in-key').value = cfg.key || ''
+  // 模拟稀有度参考线（public/data/types.json）
+  fetch('data/types.json').then(r => r.ok ? r.json() : null).then(t => {
+    if (!t) return
+    const map = {}
+    const put = o => Object.values(o || {}).forEach(x => { if (x.code && x.rarity) map[x.code] = x.rarity })
+    put(t.standard); put(t.special)
+    simMap = map
+    render()
+  }).catch(() => {})
+  load()
+}
+
+$('btn-save').onclick = () => {
+  const base = $('in-base').value.trim().replace(/\/+$/, '')
+  const key = $('in-key').value.trim()
+  if (!base || !key) { alert('请填写完整'); return }
+  localStorage.setItem(CFG_KEY, JSON.stringify({ apiBase: base, key, minSample: 500 }))
+  boot()
+}
+$('btn-refresh').onclick = load
+$('btn-export').onclick = () => {
+  if (!allRows.length) { alert('暂无数据可导出'); return }
+  // UTF-8 BOM，保证 Excel 打开中文不乱码
+  const head = 'code,cn,version,levels,feedback,time'
+  const esc = v => `,"${String(v == null ? '' : v).replace(/"/g, '""')}"`
+  const body = allRows.map(r => [
+    r.code, r.cn, r.v, r.levels, r.feedback || '无反馈',
+    r.ts ? new Date(r.ts).toLocaleString('zh-CN') : ''
+  ].map(esc).join('')).join('\n')
+  const blob = new Blob(['\ufeff' + head + '\n' + body], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.download = `SkyTi-数据导出-${new Date().toISOString().slice(0, 10)}.csv`
+  a.href = URL.createObjectURL(blob)
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+$('btn-logout').onclick = () => { localStorage.removeItem(CFG_KEY); location.reload() }
+
+boot()
+</script>
+</body>
+</html>

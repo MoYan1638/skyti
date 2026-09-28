@@ -1,20 +1,10 @@
 {
   "scoring": {
-    "levelThresholds": {
-      "L": [
-        3,
-        4
-      ],
-      "M": [
-        5,
-        5
-      ],
-      "H": [
-        6,
-        7
-      ]
-    },
-    "fallbackThreshold": 30
+    "fallbackThreshold": 30,
+    "levelFractions": {
+      "L": 0.3333,
+      "H": 0.6667
+    }
   },
   "display": {
     "title": "SkyTi · Pro",
@@ -23,11 +13,18 @@
     "accentColor": "#FFD966",
     "secondaryColor": "#7EC8E3",
     "font": "system-ui, sans-serif",
-    "disclaimer": "本测试仅供娱乐，与游戏官方无关",
+    "disclaimer": "本测试仅供娱乐，与游戏官方无关。答题结果仅用于匿名统计，不收集任何个人信息。",
     "totalQuestions": 52,
-    "topN": 3
+    "topN": 3,
+    "shareUrl": "skytipro.moyan06.icu",
+    "version": "pro"
   },
   "title": "SkyTi · Pro",
   "questionCount": 52,
-  "version": "pro"
+  "version": "pro",
+  "stats": {
+    "enabled": true,
+    "apiBase": "https://api.moyan06.icu",
+    "minSample": 500
+  }
 }
