@@ -77,12 +77,18 @@ const friendInfo = friendRaw ? (() => {
   const [code, cn, lv] = b64d(friendRaw)?.split('|') || []
   return code && cn && lv ? { code, cn, lv } : null
 })() : null
-if (friendInfo) {
+/* 好友横幅：首次出现 / 文案更新（换成对比结果）都重播一次入场动画 */
+function showFriendBanner(text) {
   const fb = document.getElementById('friend-banner')
-  if (fb) {
-    fb.textContent = `💌 好友测评模式：你在帮「${friendInfo.cn}」答题——凭你对 TA 的印象来选哦`
-    fb.style.display = 'block'
-  }
+  if (!fb) return
+  fb.textContent = text
+  fb.style.display = 'block'
+  fb.classList.remove('anim')
+  void fb.offsetWidth // 强制回流，动画才能重放
+  fb.classList.add('anim')
+}
+if (friendInfo) {
+  showFriendBanner(`💌 好友测评模式：你在帮「${friendInfo.cn}」答题——凭你对 TA 的印象来选哦`)
 }
 /* 版本切换器带上 ?f= 一起跳：好友测评模式换版本不能丢，
    否则会被当成自测（还会把结果当成自己的上报） */
@@ -310,13 +316,9 @@ function renderResult() {
   // 历史记录 / 好友对比
   const levelsStr = dimOrder.map(d => levels[d]).join('')
   if (friendInfo) {
-    const fb = document.getElementById('friend-banner')
-    if (fb) {
-      fb.style.display = 'block'
-      fb.textContent = primary.code === friendInfo.code
-        ? `🪞 神奇！你眼中的 TA 和 TA 自测都是「${friendInfo.cn}」，你们是镜像光翼！`
-        : `💌 对比结果：TA 自测是「${friendInfo.cn}（${friendInfo.code}）」，你眼中的 TA 是「${primary.cn}（${primary.code}）」`
-    }
+    showFriendBanner(primary.code === friendInfo.code
+      ? `🪞 神奇！你眼中的 TA 和 TA 自测都是「${friendInfo.cn}」，你们是镜像光翼！`
+      : `💌 对比结果：TA 自测是「${friendInfo.cn}（${friendInfo.code}）」，你眼中的 TA 是「${primary.cn}（${primary.code}）」`)
   } else {
     saveHistory(primary)
     reportResult(primary, levelsStr) // 匿名上报（仅自测，未配置时静默跳过）
