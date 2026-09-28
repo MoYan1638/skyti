@@ -8,10 +8,13 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.63.5",
     "vite": "^5.0.0"
   },
   "dependencies": {
     "morphicons": "^1.7.1"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.63.5",
+    "@rollup/rollup-linux-x64-gnu": "^4.63.5"
   }
 }
