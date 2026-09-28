@@ -80,16 +80,19 @@ export function drawRadarChart(canvas, dimOrder, userVec, scale = 1) {
     ctx.stroke()
   }
 
-  // 标签
+  // 标签（两侧边缘自动内收，防止文字被画布裁掉）
   ctx.font = `${11 * scale}px "PingFang SC", sans-serif`
   ctx.fillStyle = '#8BA4CC'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
+  const pad = 6 * scale
   for (let i = 0; i < n; i++) {
     const angle = (Math.PI * 2 * i / n) - Math.PI / 2
     const labelR = R + 18 * scale
-    const x = cx + labelR * Math.cos(angle)
     const y = cy + labelR * Math.sin(angle)
+    const w = ctx.measureText(dimOrder[i]).width
+    let x = cx + labelR * Math.cos(angle)
+    x = Math.min(Math.max(x, w / 2 + pad), W - w / 2 - pad)
     ctx.fillText(dimOrder[i], x, y)
   }
 
@@ -99,10 +102,12 @@ export function drawRadarChart(canvas, dimOrder, userVec, scale = 1) {
     const idx = mi * 3 + 1
     const angle = (Math.PI * 2 * idx / n) - Math.PI / 2
     const labelR = R + 32 * scale
-    const x = cx + labelR * Math.cos(angle)
     const y = cy + labelR * Math.sin(angle)
     ctx.font = `bold ${10 * scale}px "PingFang SC", sans-serif`
     ctx.fillStyle = '#FFD96680'
+    const w = ctx.measureText(MODEL_LABELS[m]).width
+    let x = cx + labelR * Math.cos(angle)
+    x = Math.min(Math.max(x, w / 2 + pad), W - w / 2 - pad)
     ctx.fillText(MODEL_LABELS[m], x, y)
   })
 }
