@@ -41,6 +41,11 @@
   .bar-real { height:100%; background:linear-gradient(90deg,#7EC8E3,#FFD966); border-radius:5px; }
   .bar-sim { position:absolute; top:-2px; width:2px; height:14px; background:#fff; opacity:.65; }
   .legend { font-size:.72em; color:var(--dim); margin-top:6px; }
+  #trend { display:flex; align-items:flex-end; gap:3px; height:96px; }
+  #trend .t-col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
+  #trend .t-bar { width:100%; min-height:2px; background:linear-gradient(180deg,#FFD966,#7EC8E3); border-radius:2px 2px 0 0; }
+  #trend .t-n { font-size:.6em; color:#8BA4CC; margin-bottom:2px; }
+  #trend .t-l { font-size:.56em; color:#5a6f95; margin-top:3px; white-space:nowrap; }
   .legend i { display:inline-block; width:14px; height:8px; border-radius:2px;
               background:linear-gradient(90deg,#7EC8E3,#FFD966); vertical-align:middle; margin-right:4px; }
   .legend u { text-decoration:none; display:inline-block; width:2px; height:10px; background:#fff;
@@ -74,6 +79,10 @@
       <div class="tabs" id="tabs"></div>
       <div id="list"></div>
       <div class="legend"><i></i>实测占比 <u></u>白线 = 模拟稀有度参考</div>
+    </div>
+    <div class="card" id="trend-card" style="display:none">
+      <div style="color:#FFD966;font-size:.85em;font-weight:bold;margin-bottom:10px">📈 近 14 天答题趋势</div>
+      <div id="trend"></div>
     </div>
     <div class="card" id="fb-card" style="display:none">
       <div style="color:#FFD966;font-size:.85em;font-weight:bold;margin-bottom:10px">💬 最新意见反馈</div>
@@ -131,6 +140,33 @@ function renderFeedback(rows) {
   })
 }
 
+function renderTrend(rows) {
+  const days = []
+  const start = new Date(); start.setHours(0, 0, 0, 0)
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(start.getTime() - i * 86400000)
+    days.push({ t: d.getTime(), label: `${d.getMonth() + 1}/${d.getDate()}`, n: 0 })
+  }
+  rows.forEach(r => {
+    if (!r.ts) return
+    const d = new Date(r.ts); d.setHours(0, 0, 0, 0)
+    const hit = days.find(x => x.t === d.getTime())
+    if (hit) hit.n++
+  })
+  const max = Math.max(...days.map(d => d.n), 1)
+  const el = $('trend')
+  el.innerHTML = ''
+  days.forEach(d => {
+    const col = document.createElement('div')
+    col.className = 't-col'
+    col.innerHTML = `<span class="t-n">${d.n || ''}</span>
+      <div class="t-bar" style="height:${(d.n / max * 70).toFixed(0)}px" title="${d.label}：${d.n} 人"></div>
+      <span class="t-l">${d.label}</span>`
+    el.appendChild(col)
+  })
+  $('trend-card').style.display = 'block'
+}
+
 function render() {
   const rows = curVer === 'all' ? allRows : allRows.filter(r => r.v === curVer)
   const total = rows.length
@@ -149,6 +185,7 @@ function render() {
   const maxN = agg.length ? agg[0][1].n : 1
   const list = $('list')
   renderFeedback(rows)
+  renderTrend(rows)
   list.innerHTML = agg.length ? '' : '<div class="empty">暂无数据，去做个测试试试吧 ✨</div>'
   agg.forEach(([code, v], i) => {
     const pct = (v.n / total * 100)

@@ -5,3 +5,10 @@
  */
 import './quiz.js'
 import './feedback.js'
+
+// PWA：注册最小 service worker（仅满足安装条件，不做缓存）
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {})
+  })
+}

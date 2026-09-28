@@ -1,0 +1,16 @@
+{
+  "name": "SkyTi 光遇人格测试",
+  "short_name": "SkyTi",
+  "description": "《光·遇》主题人格类型测试：15 维度深度解析，27 种天空灵魂",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#060c1a",
+  "theme_color": "#060c1a",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

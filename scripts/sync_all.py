@@ -56,6 +56,12 @@ def patch_index(v, base):
     # 5) 好友横幅
     if 'friend-banner' not in h:
         h = h.replace('<div id="app">', '<div id="app">\n    <div id="friend-banner" class="friend-banner" style="display:none"></div>')
+    # 6) PWA：manifest + 图标
+    if 'rel="manifest"' not in h:
+        h = h.replace('<link rel="icon" type="image/svg+xml" href="./favicon.svg" />',
+                      '<link rel="icon" type="image/svg+xml" href="./favicon.svg" />\n'
+                      '  <link rel="manifest" href="./manifest.json" />\n'
+                      '  <link rel="apple-touch-icon" href="./icon-192.png" />')
     open(os.path.join(base, 'index.html'), 'w', encoding='utf-8').write(h)
 
 def sync_version(v):
@@ -92,6 +98,22 @@ def sync_version(v):
     os.makedirs(os.path.join(pub, 'data'), exist_ok=True)
     shutil.copy(os.path.join(STD, 'public', 'stats.html'), os.path.join(pub, 'stats.html'))
     shutil.copy(os.path.join(STD, 'data', 'types.json'), os.path.join(pub, 'data', 'types.json'))
+    # PWA 文件分发
+    for f in ('manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png'):
+        src = os.path.join(STD, 'public', f)
+        if os.path.exists(src):
+            shutil.copy(src, os.path.join(pub, f))
+    # SEO：robots.txt + sitemap.xml（按各端域名生成）
+    dom = DOMAINS[v]
+    with open(os.path.join(pub, 'robots.txt'), 'w', encoding='utf-8', newline='\n') as f:
+        f.write(f'User-agent: *\nAllow: /\nDisallow: /stats.html\n\nSitemap: https://{dom}/sitemap.xml\n')
+    pages = [(f'https://{dom}/', '1.0', 'daily'), (f'https://{dom}/og-image.png', '0.3', 'monthly')]
+    sm = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for loc, pri, freq in pages:
+        sm.append(f'  <url><loc>{loc}</loc><changefreq>{freq}</changefreq><priority>{pri}</priority></url>')
+    sm.append('</urlset>')
+    with open(os.path.join(pub, 'sitemap.xml'), 'w', encoding='utf-8', newline='\n') as f:
+        f.write('\n'.join(sm) + '\n')
     # index.html 补丁
     patch_index(v, base)
     # 清理无引用的乱码遗留 data/*.js

@@ -32,6 +32,30 @@ const dimOrder = ['S1','S2','S3','E1','E2','E3','A1','A2','A3','Ac1','Ac2','Ac3'
 // 每次加载：从 100 题总库按维度均衡抽样
 const allQuestions = sampleQuestions(pool.main, display.totalQuestions, dimOrder)
 
+/* ─── 真实稀有度：样本攒够后自动替换模拟值 ─── */
+let realStats = null      // { total, counts } 上报后端聚合
+let currentRarityStr = '' // 当前结果用的稀有度文案（长图卡复用）
+;(async () => {
+  try {
+    const api = config.stats && config.stats.apiBase
+    if (!api) return
+    const r = await fetch(`${api}/?action=summary`)
+    const d = await r.json()
+    if (d.ok && d.total >= (config.stats.minSample || 500)) {
+      realStats = d
+      // 若结果页已打开，重刷一次让真实稀有度生效
+      if (document.getElementById('page-result')?.classList.contains('active')) renderResult()
+    }
+  } catch (e) { /* 静默，沿用模拟值 */ }
+})()
+function rarityOf(code, fallback) {
+  if (realStats && realStats.counts && realStats.counts[code] != null) {
+    const pct = realStats.counts[code] / realStats.total * 100
+    return `${pct.toFixed(1)}% · 真实数据（${realStats.total} 人实测）`
+  }
+  return fallback || ''
+}
+
 let currentIndex = 0
 let answers = {}
 
@@ -73,6 +97,15 @@ export function showPage(id) {
 document.getElementById('btn-start')?.addEventListener('click', () => {
   currentIndex = 0
   answers = {}
+  // 选项乱序防背题：每次开测随机打乱，同一轮内前后翻页顺序保持一致
+  allQuestions.forEach(q => {
+    const a = q.options.slice()
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[a[i], a[j]] = [a[j], a[i]]
+    }
+    q.options = a
+  })
   showPage('quiz')
 })
 document.getElementById('btn-prev')?.addEventListener('click', () => {
@@ -195,9 +228,10 @@ function renderResult() {
   document.getElementById('result-desc').textContent = primary.desc
   document.getElementById('result-badge').textContent = primary.badge || ''
 
-  // 稀有度
+  // 稀有度（样本足够时自动切真实占比）
+  currentRarityStr = rarityOf(primary.code, primary.rarity)
   const rarEl = document.getElementById('result-rarity')
-  if (rarEl) rarEl.textContent = `✦ 全网约 ${primary.rarity} 的旅人与你同频 ✦`
+  if (rarEl) rarEl.textContent = currentRarityStr ? `✦ 全网约 ${currentRarityStr} 的旅人与你同频 ✦` : ''
 
   // 牵手搭子 / 斗篷不合
   if (primary.cp) {
@@ -413,8 +447,8 @@ function saveResultImage() {
 
   // 雷达图下方信息区：次要人格 + CP 搭子 / 斗篷不合
   let infoY = 1058
-  if (primary.rarity) {
-    center(`✦ 全网约 ${primary.rarity} 的旅人与你同频 ✦`, infoY, '24px "PingFang SC", sans-serif', '#FFD966')
+  if (currentRarityStr) {
+    center(`✦ 全网约 ${currentRarityStr} 的旅人与你同频 ✦`, infoY, '24px "PingFang SC", sans-serif', '#FFD966')
     infoY += 34
   }
   if (matched[1]) {
