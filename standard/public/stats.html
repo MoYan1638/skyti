@@ -75,6 +75,9 @@
   .grp-n { color:#8BA4CC; }
   .grp-latest { margin-left:auto; color:#5a6f95; font-size:.92em; white-space:nowrap; }
   .grp-del { margin-left:8px; }
+  .grp-code { color:#5a6f95; font-size:.88em; margin-left:5px; }
+  .grp-type { color:var(--blue); font-size:.94em; }
+  .rec-hint { color:#5a6f95; font-size:.72em; margin:-2px 0 10px; line-height:1.5; }
   .grp-body { padding:2px 10px 4px; }
   .grp.fold .grp-body { display:none; }
   .card-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
@@ -114,6 +117,7 @@
         <div id="rec-count" style="color:#8BA4CC;font-size:.72em"></div>
       </div>
       <div id="rec-list"></div>
+      <div class="rec-hint">同一个人 = 同一浏览器；#号按首次答题先后编，与下面的排行无关。点组头可折叠。</div>
       <div class="rec-more" id="rec-more" style="display:none"></div>
     </div>
     <div class="card" id="trend-card" style="display:none">
@@ -205,8 +209,23 @@ function groupRows(rows) {
   })
   return [...m.entries()].map(([k, items]) => {
     items.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
-    return { key: k, items, latest: Number(items[0].ts) || 0 }
+    const tsAll = items.map(x => Number(x.ts) || 0).filter(n => n > 0)
+    return {
+      key: k, items,
+      latest: tsAll.length ? Math.max(...tsAll) : 0,
+      first: tsAll.length ? Math.min(...tsAll) : Infinity
+    }
   }).sort((a, b) => b.latest - a.latest)
+}
+
+/** 给每位旅人编个稳定号：#1 #2 …（按首次答题先后，与列表排序无关） */
+function userNumbers(groups) {
+  const num = new Map()
+  let n = 0
+  groups.slice().sort((a, b) => a.first - b.first).forEach(g => {
+    if (g.key !== '__legacy__') num.set(g.key, ++n)
+  })
+  return num
 }
 
 function recordEl(r) {
@@ -224,16 +243,22 @@ function recordEl(r) {
   return div
 }
 
-function groupEl(g, items) {
+function groupEl(g, items, num) {
   const legacy = g.key === '__legacy__'
   const box = document.createElement('div')
   box.className = 'grp' + (folded[g.key] ? ' fold' : '')
 
   const head = document.createElement('div')
   head.className = 'grp-head'
+  const label = legacy
+    ? '❔ 未标记（改动前的旧数据）'
+    : `👤 旅人 #${num || '?'}<span class="grp-code">${esc(g.key.slice(-6))}</span>`
+  const latestType = g.items[0] && g.items[0].cn
+    ? `<span class="grp-type">最近测出 ${esc(g.items[0].cn)}</span>` : ''
   head.innerHTML = `<span class="grp-arrow">▾</span>
-    <span class="grp-id">${legacy ? '❔ 未标记（旧数据）' : '👤 旅人 ' + esc(g.key.slice(-6))}</span>
-    <span class="grp-n">· ${g.items.length} 次答题</span>
+    <span class="grp-id">${label}</span>
+    <span class="grp-n">· ${g.items.length} 次</span>
+    ${latestType}
     <span class="grp-latest">最近 ${fmtTime(g.latest)}</span>`
   head.onclick = () => {
     folded[g.key] = !folded[g.key]
@@ -274,12 +299,13 @@ function renderRecords(rows) {
     return
   }
   let shown = 0, gShown = 0
+  const nums = userNumbers(groups)
   for (const g of groups) {
     if (shown >= REC_LIMIT || gShown >= GROUP_LIMIT) break
     const take = g.items.slice(0, Math.min(REC_PER_GROUP, REC_LIMIT - shown))
     shown += take.length
     gShown++
-    list.appendChild(groupEl(g, take))
+    list.appendChild(groupEl(g, take, nums.get(g.key)))
   }
   const rest = rows.length - shown
   if (rest > 0 || groups.length > gShown) {
