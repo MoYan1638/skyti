@@ -1,0 +1,8 @@
+git : To github.com:MoYan1638/skyti.git
+所在位置 行:445 字符: 8
++ $out = git -C E:\skyti\monorepo2 push origin master 2>&1 | Out-String ...
++        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (To github.com:MoYan1638/skyti.git:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   c4f161b..720161e  master -> master

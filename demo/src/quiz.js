@@ -310,8 +310,8 @@ function renderResult() {
   // 免责声明
   document.getElementById('disclaimer').textContent = display.disclaimer
 
-  // 记录已用题目，下次抽题避让
-  recordUsedQuestions(allQuestions)
+  // 记录已用题目，下次抽题避让（重看历史结果时跳过）
+  if (!replaying) recordUsedQuestions(allQuestions)
 
   // 历史记录 / 好友对比
   const levelsStr = dimOrder.map(d => levels[d]).join('')
@@ -319,14 +319,15 @@ function renderResult() {
     showFriendBanner(primary.code === friendInfo.code
       ? `🪞 神奇！你眼中的 TA 和 TA 自测都是「${friendInfo.cn}」，你们是镜像光翼！`
       : `💌 对比结果：TA 自测是「${friendInfo.cn}（${friendInfo.code}）」，你眼中的 TA 是「${primary.cn}（${primary.code}）」`)
-  } else {
+  } else if (!replaying) {
     saveHistory(primary)
-    reportResult(primary, levelsStr) // 匿名上报（仅自测，未配置时静默跳过）
+    reportResult(primary, levelsStr, answers) // 匿名上报（仅自测，未配置时静默跳过）
   }
 
   // 按钮事件（onclick 赋值避免重复绑定）
   document.getElementById('btn-restart').onclick = restart
   document.getElementById('btn-share').onclick = saveResultImage
+  replaying = false
   const btnFriend = document.getElementById('btn-friend')
   if (btnFriend) {
     // 好友模式下不显示邀请按钮
@@ -348,10 +349,12 @@ function restart() {
 
 /* ─── 历史记录 ─── */
 const HISTORY_KEY = 'skyti_history_v1'
+let replaying = false // 重看历史结果时为 true：不再存历史/上报/污染抽题避让
 function saveHistory(primary) {
   try {
     const arr = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
-    arr.unshift({ code: primary.code, cn: primary.cn, rarity: primary.rarity, date: new Date().toLocaleDateString('zh-CN') })
+    // 连答案快照一起存，方便以后点开重看、重新生成长图
+    arr.unshift({ code: primary.code, cn: primary.cn, rarity: primary.rarity, date: new Date().toLocaleDateString('zh-CN'), ts: Date.now(), answers: JSON.parse(JSON.stringify(answers)) })
     localStorage.setItem(HISTORY_KEY, JSON.stringify(arr.slice(0, 20)))
   } catch (e) { /* ignore */ }
 }
@@ -367,7 +370,17 @@ function renderHistory() {
   arr.slice(0, 5).forEach(h => {
     const div = document.createElement('div')
     div.className = 'history-item'
-    div.textContent = `${h.date} · ${h.cn}（${h.code}）`
+    const canReplay = h.answers && Object.keys(h.answers).length
+    div.textContent = `${h.date} · ${h.cn}（${h.code}）${canReplay ? ' · 点击重看' : ''}`
+    if (canReplay) {
+      div.classList.add('history-view')
+      div.title = '重看这份结果，可重新保存长图'
+      div.onclick = () => {
+        replaying = true
+        answers = JSON.parse(JSON.stringify(h.answers))
+        showPage('result')
+      }
+    }
     list.appendChild(div)
   })
   document.getElementById('btn-history-clear').onclick = () => {

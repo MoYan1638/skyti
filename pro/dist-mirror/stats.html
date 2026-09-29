@@ -60,12 +60,6 @@
   .rec-main em { font-style:normal; color:var(--dim); }
   .rec-main i { font-style:normal; color:#7EC8E3; }
   .rec-fb { display:block; color:#a8b8d8; font-size:.92em; margin-top:2px; }
-  .rec-detail { margin-top:4px; }
-  .rec-detail summary { cursor:pointer; color:#7EC8E3; font-size:.92em; user-select:none; }
-  .rec-detail-list { margin-top:4px; padding:6px 10px; background:rgba(6,12,26,.5); border-radius:8px; }
-  .det-row { display:flex; justify-content:space-between; gap:12px; padding:2px 0; font-size:.9em; }
-  .det-q { color:#8BA4CC; }
-  .det-a { color:var(--gold); text-align:right; white-space:nowrap; }
   .rec-del { flex:0 0 auto; background:transparent; border:1px solid rgba(255,120,120,.5);
              color:#ff9b9b; border-radius:14px; padding:3px 10px; font-size:.78em; cursor:pointer; }
   .rec-del:hover { background:rgba(255,120,120,.15); }
@@ -152,7 +146,7 @@
 <script>
 const CFG_KEY = 'skyti_stats_cfg_v1'
 const VERSIONS = { all: '全部', standard: '标准版 30题', demo: 'Demo 15题', pro: 'Pro 52题' }
-let cfg = null, allRows = [], simMap = {}, curVer = 'all', qMap = {}
+let cfg = null, allRows = [], simMap = {}, curVer = 'all'
 
 const $ = id => document.getElementById(id)
 const REC_LIMIT = 200
@@ -246,26 +240,6 @@ function recordEl(r) {
     ? `<span class="rec-fb">💬 ${esc(r.feedback)}</span>` : ''
   div.innerHTML = `<span class="rec-time">${fmtTime(r.ts)}</span>
     <span class="rec-main"><b>${esc(r.cn || '未知')}</b> <em>${esc(r.code || '')}</em> · <i>${esc(VERSIONS[r.v] || r.v || '?')}</i>${fb}</span>`
-  // 答题明细（题目ID → 选项），点击展开逐题对照题库展示
-  if (r.detail && typeof r.detail === 'object') {
-    const entries = Object.entries(r.detail)
-    if (entries.length) {
-      const det = document.createElement('details')
-      det.className = 'rec-detail'
-      const sum = document.createElement('summary')
-      sum.textContent = `📋 答题明细（${entries.length} 题）`
-      det.appendChild(sum)
-      const listEl = document.createElement('div')
-      listEl.className = 'rec-detail-list'
-      listEl.innerHTML = entries.map(([qid, val]) => {
-        const q = qMap[qid]
-        const opt = q && q.options ? q.options[Number(val)] : null
-        return `<div class="det-row"><span class="det-q">${esc(q ? q.text : qid)}</span><span class="det-a">${esc(opt ? opt.label : '选项' + (Number(val) + 1))}</span></div>`
-      }).join('')
-      det.appendChild(listEl)
-      div.querySelector('.rec-main').appendChild(det)
-    }
-  }
   const btn = document.createElement('button')
   btn.className = 'rec-del'
   btn.textContent = '删除'
@@ -502,13 +476,6 @@ function boot() {
     const put = o => Object.values(o || {}).forEach(x => { if (x.code && x.rarity) map[x.code] = x.rarity })
     put(t.standard); put(t.special)
     simMap = map
-    render()
-  }).catch(() => {})
-  // 题库（答题明细展示用：qid → 题目/选项文本）
-  fetch('data/questions-pool.json').then(r => r.ok ? r.json() : null).then(p => {
-    if (!p || !Array.isArray(p.main)) return
-    qMap = {}
-    p.main.forEach(q => { qMap[q.id] = q })
     render()
   }).catch(() => {})
   load()

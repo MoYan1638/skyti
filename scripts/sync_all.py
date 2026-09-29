@@ -98,6 +98,8 @@ def sync_version(v):
     os.makedirs(os.path.join(pub, 'data'), exist_ok=True)
     shutil.copy(os.path.join(STD, 'public', 'stats.html'), os.path.join(pub, 'stats.html'))
     shutil.copy(os.path.join(STD, 'data', 'types.json'), os.path.join(pub, 'data', 'types.json'))
+    # 题库总库（看板答题明细展示用）
+    shutil.copy(os.path.join(STD, 'data', 'questions-pool.json'), os.path.join(pub, 'data', 'questions-pool.json'))
     # PWA 文件分发
     for f in ('manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png'):
         src = os.path.join(STD, 'public', f)

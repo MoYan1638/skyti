@@ -4,11 +4,12 @@
  * uid 是随机生成的匿名设备标识（只存在本机 localStorage），用于把同一人的多次答题归组。
  * feedback 默认为「无反馈」；用户提交反馈后，按 ts 定位本条记录并更新。
  * 后端：自建轻量接口（skyti-api，https://api.moyan06.icu）
- *   POST / {action:"report", code, cn, levels, v, ts, uid, feedback}
+ *   POST / {action:"report", code, cn, levels, v, ts, uid, feedback, detail}
+ *   detail：题目ID→选项序号的答题明细（仅选项编号，不含题目原文/个人信息），供后台完整还原
  *   POST / {action:"feedback", ts, feedback}
  *   GET  /?action=stats
  * 未配置（stats.enabled=false）时静默跳过，不影响测试。
- * 不收集任何个人信息、IP 关联或答题原文。
+ * 不收集任何个人信息、IP 关联或题目原文。
  */
 import config from '../data/config.json' with { type: 'json' }
 
@@ -96,7 +97,7 @@ function flushQueue() {
  * 好友测评模式（帮别人答）不上报，保证数据是真实自测。
  * 若用户之前在首页等处提前写过反馈，合并进本条记录。
  */
-export function reportResult(primary, levelsStr) {
+export function reportResult(primary, levelsStr, answersDetail) {
   if (isFriendMode()) return
   const ts = Date.now()
   lastTs = ts
@@ -116,7 +117,8 @@ export function reportResult(primary, levelsStr) {
     v: config.display.version || 'standard',
     ts,
     uid: getUid(),
-    feedback: fb
+    feedback: fb,
+    detail: answersDetail && typeof answersDetail === 'object' ? answersDetail : undefined
   }
   if (!configured()) return
   send(payload)

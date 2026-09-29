@@ -2,7 +2,7 @@
  * SkyTi API — 自建轻量后端（零依赖）
  * 数据存储：/var/lib/skyti/results.json（JSON 数组，按 ts 定位）
  * 动作：
- *   POST { action: "report",   code, cn, levels, v, ts, uid, feedback }
+ *   POST { action: "report",   code, cn, levels, v, ts, uid, feedback, detail }
  *   POST { action: "feedback", ts, feedback }        // 按时间戳回填意见反馈
  *   POST { action: "delete",   key, ts | tsList }    // 删除单条/多条（看板用，需 key）
  *   GET  ?action=summary                              // 公开聚合 {total, counts}（前端切真实稀有度）
@@ -79,6 +79,15 @@ const server = http.createServer((req, res) => {
     try { data = JSON.parse(body || '{}') } catch (e) { return send(res, 400, { ok: false, error: 'bad json' }) }
 
     if (data.action === 'report') {
+      // 答题明细（题目ID → 选项序号）：仅选项编号，无题目原文/用户信息；限 120 题防滥用
+      let detail = null
+      if (data.detail && typeof data.detail === 'object' && !Array.isArray(data.detail)) {
+        detail = {}
+        for (const k of Object.keys(data.detail).slice(0, 120)) {
+          const val = Number(data.detail[k])
+          detail[String(k).slice(0, 12)] = Number.isFinite(val) ? val : -1
+        }
+      }
       const rec = {
         code: String(data.code || '').slice(0, 20),
         cn: String(data.cn || '').slice(0, 50),
@@ -87,7 +96,8 @@ const server = http.createServer((req, res) => {
         ts: Number(data.ts) || Date.now(),
         // 匿名设备标识：同一浏览器多次答题归为同一人（看板分组用）
         uid: String(data.uid || '').slice(0, 24),
-        feedback: String(data.feedback || '无反馈').slice(0, 200)
+        feedback: String(data.feedback || '无反馈').slice(0, 200),
+        detail
       }
       if (!rec.code || !rec.levels) return send(res, 400, { ok: false, error: 'missing fields' })
       const records = load()

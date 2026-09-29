@@ -991,6 +991,11 @@ canvas { filter: drop-shadow(0 0 8px #FFD96630); }
   border-bottom: 1px dashed #1e3560;
 }
 .history-item:last-child { border-bottom: none; }
+.history-item.history-view {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.history-item.history-view:hover { color: #FFD966; }
 .history-clear {
   margin-top: 6px;
   background: none;
