@@ -12,6 +12,22 @@
   <meta property="og:type" content="website" />
   <meta property="og:image" content="https://skytidemo.moyan06.icu/og-image.png" />
   <meta name="theme-color" content="#060c1a" />
+  <script>
+    /* skyti-migrate：老域名 → 新子路径的一次性迁移，切换当天才打开开关 */
+    (function () {
+      var MIGRATION_ON = false
+      var LEGACY = {
+        'skytidemo.moyan06.icu': 'https://skyti.moyan06.icu/demo/',
+        'skytipro.moyan06.icu': 'https://skyti.moyan06.icu/pro/'
+      }
+      if (!MIGRATION_ON) return
+      var target = LEGACY[location.hostname]
+      if (!target) return
+      var uid = ""
+      try { uid = localStorage.getItem("skyti_uid_v1") || "" } catch (e) {}
+      location.replace(target + (uid ? "?u=" + encodeURIComponent(uid) : ""))
+    })()
+  </script>
 </head>
 <body>
   <div id="app">

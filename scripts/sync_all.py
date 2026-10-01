@@ -62,6 +62,30 @@ def patch_index(v, base):
                       '<link rel="icon" type="image/svg+xml" href="./favicon.svg" />\n'
                       '  <link rel="manifest" href="./manifest.json" />\n'
                       '  <link rel="apple-touch-icon" href="./icon-192.png" />')
+    # 7) 旧域名迁移：三端合并到 skyti.moyan06.icu/{standard,demo,pro} 后，把老域名的访客
+    #    连同本机 uid 一起送过去（?u=），新页面据此把老记录过户到新 uid。
+    #    刻意不用 301：301 是服务器级跳转，页面脚本根本不执行，就读不到本机 uid，老记录会断。
+    #    切换当天把 MIGRATION_ON 改成 true、重新部署 demo/pro 两端即可；standard 域名不在表里，天然不跳。
+    if 'skyti-migrate' not in h:
+        mig = (
+            '  <script>\n'
+            '    /* skyti-migrate：老域名 → 新子路径的一次性迁移，切换当天才打开开关 */\n'
+            '    (function () {\n'
+            '      var MIGRATION_ON = false\n'
+            '      var LEGACY = {\n'
+            "        'skytidemo.moyan06.icu': 'https://skyti.moyan06.icu/demo/',\n"
+            "        'skytipro.moyan06.icu': 'https://skyti.moyan06.icu/pro/'\n"
+            '      }\n'
+            '      if (!MIGRATION_ON) return\n'
+            '      var target = LEGACY[location.hostname]\n'
+            '      if (!target) return\n'
+            '      var uid = ""\n'
+            '      try { uid = localStorage.getItem("skyti_uid_v1") || "" } catch (e) {}\n'
+            '      location.replace(target + (uid ? "?u=" + encodeURIComponent(uid) : ""))\n'
+            '    })()\n'
+            '  </script>\n'
+        )
+        h = h.replace('</head>', mig + '</head>')
     open(os.path.join(base, 'index.html'), 'w', encoding='utf-8').write(h)
 
 def sync_version(v):

@@ -44,6 +44,31 @@ function configured() {
   return !!(stats.enabled && stats.apiBase)
 }
 
+/**
+ * 接收从老域名带过来的本机老 uid（跳转链接上的 ?u=xxx），把服务器上该 uid 名下的记录
+ * 过户到当前 uid。用途：三端合并到同一域名后，老域名上答过的历史不会因为 uid 换掉而断掉。
+ * 老 uid 只是浏览器本地的随机串（等于取件码），不含任何身份信息。
+ * @returns {Promise<void>} 过户完成（没有 ?u= 或后端不可用时立即完成，不阻塞页面）
+ */
+export function adoptLegacyUid() {
+  let legacy = ''
+  try { legacy = new URLSearchParams(location.search).get('u') || '' } catch (e) { /* ignore */ }
+  if (!legacy) return Promise.resolve()
+  // 立刻从地址栏摘掉：避免刷新时重复触发，也避免被当作分享链接带出去
+  try {
+    const u = new URL(location.href)
+    u.searchParams.delete('u')
+    history.replaceState(null, '', u.pathname + u.search + u.hash)
+  } catch (e) { /* ignore */ }
+  const cur = getUid()
+  if (!cur || legacy === cur || !configured()) return Promise.resolve()
+  return fetch(`${stats.apiBase}/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'link', from: legacy.slice(0, 24), to: cur })
+  }).then(() => {}).catch(() => { /* 后端不可用时静默；老记录仍在服务器上 */ })
+}
+
 /** 单条上报，失败则进本地队列等待下次重试 */
 function send(payload) {
   fetch(`${stats.apiBase}/`, {

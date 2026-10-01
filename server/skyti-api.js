@@ -8,6 +8,7 @@
  *   GET  ?action=summary                              // 公开聚合 {total, counts}（前端切真实稀有度）
  *   GET  ?action=stats                                // 拉全部数据（看板用，需 key）
  *   GET  ?action=my&uid=xxx                           // 按匿名 uid 查「本人历史」（前端旅行记录在换设备/清缓存后恢复用）
+ *   POST { action: "link", from, to }                 // 把 from 名下的记录过户到 to（老域名迁移用：uid 换了但历史要留住）
  */
 const http = require('http')
 const fs = require('fs')

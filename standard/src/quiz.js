@@ -4,7 +4,7 @@
 import { calcDimensionScores, scoresToLevels, matchAllTypes } from './engine.js'
 import { drawRadarChart } from './chart.js'
 import { sampleQuestions, recordUsedQuestions } from './sampler.js'
-import { reportResult, getUid } from './report.js'
+import { reportResult, getUid, adoptLegacyUid } from './report.js'
 import { resetFeedbackDisplay } from './feedback.js'
 import { createMorph } from 'morphicons/dom'
 import pool from '../data/questions-pool.json' with { type: 'json' }
@@ -440,7 +440,9 @@ function syncHistoryFromCloud() {
   const api = config.stats && config.stats.apiBase
   const uid = getUid()
   if (!api || !config.stats.enabled || !uid) return
-  fetch(`${api}/?action=my&uid=${encodeURIComponent(uid)}`)
+  // 等老 uid 过户完成再查，否则刚并进来的老记录会被漏掉
+  legacyReady
+    .then(() => fetch(`${api}/?action=my&uid=${encodeURIComponent(uid)}`))
     .then(r => r.ok ? r.json() : null)
     .then(d => {
       if (!d || !d.ok || !Array.isArray(d.records) || !d.records.length) return
