@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /pro/stats.html
+
+Sitemap: https://skyti.moyan06.icu/pro/sitemap.xml

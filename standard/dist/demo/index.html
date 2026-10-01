@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkyTi · Demo</title>
+  <meta name="description" content="15道题，快速了解你的光遇人格。精简版光遇人格类型测试。" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <meta property="og:title" content="SkyTi 光遇人格测试 · Demo" />
+  <meta property="og:description" content="MBTI已经过时，SkyTi来了。15道题快速测出你的天空灵魂。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://skytidemo.moyan06.icu/og-image.png" />
+  <meta name="theme-color" content="#060c1a" />
+  <script>
+    /* skyti-migrate：老域名 → 新子路径的一次性迁移，切换当天才打开开关 */
+    (function () {
+      var MIGRATION_ON = false
+      var LEGACY = {
+        'skytidemo.moyan06.icu': 'https://skyti.moyan06.icu/demo/',
+        'skytipro.moyan06.icu': 'https://skyti.moyan06.icu/pro/'
+      }
+      if (!MIGRATION_ON) return
+      var target = LEGACY[location.hostname]
+      if (!target) return
+      var uid = ""
+      try { uid = localStorage.getItem("skyti_uid_v1") || "" } catch (e) {}
+      location.replace(target + (uid ? "?u=" + encodeURIComponent(uid) : ""))
+    })()
+  </script>
+  <script type="module" crossorigin src="/demo/assets/index-I9guzfAM.js"></script>
+  <link rel="stylesheet" crossorigin href="/demo/assets/index-BOOvmFEn.css">
+</head>
+<body>
+  <div id="app">
+    <div id="friend-banner" class="friend-banner" style="display:none"></div>
+
+    <!-- 首页 -->
+    <section id="page-intro" class="page active">
+      <div class="card intro-card">
+        <div class="intro-wing">🕯️</div>
+        <h1 class="intro-title">SkyTi · Demo</h1>
+        <p class="intro-subtitle">15道题，快速了解你的光遇人格</p>
+        <button id="btn-start" class="btn btn-primary">✨ 开始测试 ✨</button>
+        <div id="history-section" class="history-section" style="display:none">
+          <div class="history-title">✨ 旅行记录</div>
+          <div id="history-list"></div>
+          <button id="btn-history-clear" class="history-clear">清空记录</button>
+        </div>
+        <p class="intro-credit">光遇主题人格测试 · 仅供娱乐</p>
+        <div class="version-switcher"><a href="/standard/" class="version-btn version-demo"><span class="version-label">30题</span><span class="version-name">标准版</span></a><a href="/pro/" class="version-btn version-pro"><span class="version-label">52题</span><span class="version-name">Pro版</span></a></div><p class="intro-maker">sky墨言·出品</p>
+      </div>
+    </section>
+
+    <!-- 答题页 -->
+    <section id="page-quiz" class="page">
+      <div class="card quiz-card">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-text" id="progress-text">0 / 15</div>
+        <div class="question-area">
+          <p class="question-text" id="question-text"></p>
+        </div>
+        <div class="options" id="options"></div>
+        <div class="quiz-nav">
+          <button id="btn-prev" class="btn btn-nav" style="visibility: hidden;">← 上一题</button>
+          <button id="btn-next" class="btn btn-nav" style="visibility: hidden;"><span id="btn-next-label">下一题</span><svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path id="btn-next-icon" d="M5 12h14m-7-7 7 7-7 7"></path></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 结果页 -->
+    <section id="page-result" class="page">
+      <div class="card result-card" id="result-card">
+        <div class="result-kicker">你的天空人格</div>
+        <div class="result-code" id="result-code"></div>
+        <div class="result-name" id="result-name"></div>
+        <div class="result-badge" id="result-badge"></div>
+        <div class="result-intro" id="result-intro"></div>
+        <div class="result-rarity" id="result-rarity"></div>
+        <div class="result-desc" id="result-desc"></div>
+        <div class="result-cp" id="result-cp">
+          <div class="cp-item"><span class="cp-icon">🤝</span><span class="cp-label">牵手搭子</span><span class="cp-name" id="cp-name"></span><span class="cp-line" id="cp-line"></span></div>
+          <div class="cp-item rival"><span class="cp-icon">🚫</span><span class="cp-label">斗篷不合</span><span class="cp-name" id="rival-name"></span><span class="cp-line" id="rival-line"></span></div>
+        </div>
+
+        <div class="result-secondary" id="result-secondary" style="display:none">
+          <div class="secondary-label">次要匹配</div>
+          <div class="secondary-info" id="secondary-info"></div>
+        </div>
+
+        <h3 class="section-title">五维评分</h3>
+        <canvas id="radar-chart" width="280" height="280"></canvas>
+        <div class="dimensions-detail" id="dimensions-detail"></div>
+
+        <div class="result-top3">
+          <h3 class="section-title">最佳匹配 TOP 3</h3>
+          <div id="top-list"></div>
+        </div>
+
+        <div class="disclaimer" id="disclaimer"></div>
+
+        <div class="result-actions">
+          <button id="btn-share" class="btn btn-primary">🖼️ 保存结果图</button>
+          <button id="btn-friend" class="btn btn-secondary" style="display:none">💌 好友评我</button>
+          <button id="btn-restart" class="btn btn-secondary">🔄 重新测试</button>
+        </div>
+      </div>
+    </section>
+
+  
+  <footer style="text-align:center;padding:20px 0;font-size:12px;color:#999;width:100%;">
+    <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" style="color:#999;text-decoration:none;">蜀ICP备2026022208号-2</a>
+    <a href="https://beian.mps.gov.cn/#/query/webSearch?code=51050402000412" rel="noreferrer" target="blank" style="color:#999;text-decoration:none;">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAoCAYAAACWwljjAAAFQklEQVRYw+3Wa1BUdRjH8SOpMeg4WhZGpDIxiaaTeUFgWrxE4AVRQJGlRRAVIV1JkbgMgQLi5AVBQSVLSp0xlEAUKBEEFZCrCstll8UV2AV2YbmoGCrYv31+R95UL5pmmtamZ+bz6rz5nvOc/5zDcX9jGLs/iTxuyvIlWYkRFeTHA2HVRFtzfhthTG5KuH96/vUgNlC4mMgyw1NJit/aAXLKazYje9xtIMZ/OZz50gW+9hcNkvoLEemEPbnrSP47QYwxQ5Ifv54RqzcXwFFvSyjaOhfavN8F7Y5ZcC/HH9JOB4LNa9Zw5YA76OZV8vIGMdZtSp7cDrtOnOavYiQhTAiPwi1AMtIQaqyngsxpBtw2GAGDKfaQmpUAa6xc4Vfp4UtEdzAMycsT9JQ1Tyctl/2eEkuTlYysF/rCUNxMqDEzgTqzSXBnpgnIHCzgjvEEuD52DLBr3rA1MAaWmNtB582wdtIljZ9G9D+IPU6aTxIPBjHCcXvg3CEh9K2fDLWvjIH6D6fwTIyheuwEqLUyhzLOALq8pkN+bgRw3HY4FBsMzxojZxP9DequLjAlQwVrbpIjhyIY4UYGQ/buhdBqPxlk3Gion2IMDQIz3kJe/ZS34I7uHkmD7VSQVgYDNyIAwsNCgfXGXoOBPjP9DKrOCAogA2etGTmTHAMcFwFZye7wS5QlVHGjoEw4A2qPCUBZ6AzNcQ5Q/YYRdO+YB1U3dsDwypLio4FJ3ECryIzWz6Cm3NgTRHN8HiPF6eHAGSbAdh8feFZkB7krzaHE9h2o85sDsiAbkIsXQMN+e2CtGyF0kzdwXCgU5++D/ouLQFV4OEU/g2Q/iNuIPNaKkQflAWBqexxGjhLDVUcL6IwSQN3SGVChe6FJg9dckCx6D1QBliDZLIAxo7eA8eyv4KE0BJqTrHkZvnL9DJKn+Twmt0NsGGHZy2Dn3kQYfsQ53Hh4/r4RNGz8AIpdzKEuaAF0RC2E57MmQgE3ATjuM/CPiANW7AqSfQJQ5vk362eQKmd3JrmXsoSRocpNIMnbB9zbceDIWUPmuHFQNMkISqa9DpUvNK6YDpW2s8DfwBK48WFQnhMCgzUBoLy0BrRVe5P0NWjPLdKUsJiR1tR1wGp8IeZwMgx/SrgRvjxuAziNcwLvyathLOcJHLflhRDYGRYFrNET2rJ5yvPLoas0tOj/oL8UpC4JHyTSU+6MNCS4gvKoAB5WiKG+MAQSg0WwLXQ/ZJ3xhao0FxB5hYCbUwAEfhEF3Td8QP2dAOQnPwFlxgrolUVq9TPoaX+ZB2nLc2Gk6awj1MU78HZZwJMid2Byb550JQwVO0NfxlJgdz14vWKeRAiK6DlQF28PLZdcoLNcBIO92bb6GTQ8Q/13RURT6tlH2gvXMlITLYD6uI+gp2ozdF0VQXumM6ivCqGvahM8kPiDItkeGo8tB025GFQ3xFrSr06zI3/4yde7oN7m0sWk5eKWDqK5JWJQvAHac9ygq3Adr9gTNNc3QG85rzPfHe5/7wDtPwuhp/Zz6CjyhaZzwi6ivfetHdH/oP77+3PJQOsuRnqkQdCa4wWqyx6gyecpL64GTaEX7ycXUJz4GJp1B4O0X/Hg0Xp1tFV+8Ei1k6c5coHofxBrrzQinbKYo0SVJ+wn6iurGHlY5gY911aDJnMFaHXXiDp9GQyvtKfUA9QFTtBZ7gPdit0tpFd9OpwwFmlA9D/o9yNLDpxIKmI8PMnNSNtviCLVpYTITzrXEGWaq4qos0WgOPdpCenIF+eRrurjB4k0PXopYZG6gMg/D/gNBUxhAbSAmKMAAAAASUVORK5CYII=" alt="" style="width:16px;vertical-align:middle;margin-right:4px;">川公网安备51050402000412号
+    </a>
+  </footer>
+</div>
+</body>
+</html>

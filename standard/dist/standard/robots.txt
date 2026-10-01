@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://skyti.moyan06.icu/standard/sitemap.xml

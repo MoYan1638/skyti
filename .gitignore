@@ -1,8 +1,9 @@
 # Dependencies
 **/node_modules/
 
-# Build outputs
-**/dist/
+# Build outputs（standard/dist 是主站部署目录，需要入库，故不在此忽略）
+demo/dist/
+pro/dist/
 
 # Vercel local state
 **/.vercel/

@@ -1,5 +1,6 @@
 {
-  "buildCommand": "node ../scripts/build-site.mjs",
+  "installCommand": "echo skip-install",
+  "buildCommand": "echo prebuilt-static",
   "outputDirectory": "dist",
   "trailingSlash": true
 }
