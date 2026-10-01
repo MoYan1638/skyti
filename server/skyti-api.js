@@ -123,6 +123,19 @@ const server = http.createServer((req, res) => {
       return send(res, 200, { ok: true, saved: 1 })
     }
 
+    if (data.action === 'link') {
+      // 老域名迁移：把 from 名下的记录过户到 to（uid 换了但历史要留住）。
+      // 无鉴权，靠 uid 随机性保密，与 action=my 同级；只改 uid，不动其他字段。
+      const from = String(data.from || '').slice(0, 24)
+      const to = String(data.to || '').slice(0, 24)
+      if (!from || !to || from === to) return send(res, 400, { ok: false, error: 'bad uid' })
+      const records = load()
+      let moved = 0
+      for (const r of records) if (r.uid === from) { r.uid = to; moved++ }
+      if (moved) save(records)
+      return send(res, 200, { ok: true, moved })
+    }
+
     if (data.action === 'feedback') {
       const ts = Number(data.ts)
       const fb = String(data.feedback || '').slice(0, 200)
