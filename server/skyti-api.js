@@ -7,6 +7,7 @@
  *   POST { action: "delete",   key, ts | tsList }    // 删除单条/多条（看板用，需 key）
  *   GET  ?action=summary                              // 公开聚合 {total, counts}（前端切真实稀有度）
  *   GET  ?action=stats                                // 拉全部数据（看板用，需 key）
+ *   GET  ?action=my&uid=xxx                           // 按匿名 uid 查「本人历史」（前端旅行记录在换设备/清缓存后恢复用）
  */
 const http = require('http')
 const fs = require('fs')
@@ -66,6 +67,19 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && action === 'stats') {
     if (qs.key !== ADMIN_KEY) return send(res, 403, { ok: false, error: 'forbidden' })
     return send(res, 200, { ok: true, records: load() })
+  }
+
+  // 按匿名 uid 查本人历史：前端旅行记录在换设备/清缓存后恢复用。
+  // uid 是浏览器本地随机串（等于取件码）；只回类型/维度等级/版本/时间，不含反馈与答题明细。
+  if (req.method === 'GET' && action === 'my') {
+    const uid = String(qs.uid || '').slice(0, 24)
+    if (!uid) return send(res, 400, { ok: false, error: 'missing uid' })
+    const records = load()
+      .filter(r => r.uid === uid)
+      .sort((a, b) => a.ts - b.ts)
+      .slice(-20)
+      .map(r => ({ code: r.code, cn: r.cn, levels: r.levels, v: r.v, ts: r.ts }))
+    return send(res, 200, { ok: true, records })
   }
 
   if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'method not allowed' })

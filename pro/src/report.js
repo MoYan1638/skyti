@@ -8,6 +8,7 @@
  *   detail：题目ID→选项序号的答题明细（仅选项编号，不含题目原文/个人信息），供后台完整还原
  *   POST / {action:"feedback", ts, feedback}
  *   GET  /?action=stats
+ *   GET  /?action=my&uid=xxx   （拉回本机 uid 的历史记录，用于旅行记录恢复）
  * 未配置（stats.enabled=false）时静默跳过，不影响测试。
  * 不收集任何个人信息、IP 关联或题目原文。
  */
@@ -28,7 +29,7 @@ function isFriendMode() {
 }
 
 /** 匿名设备标识：同一浏览器多次答题归为同一人（看板按此分组）。不含任何个人信息。 */
-function getUid() {
+export function getUid() {
   try {
     let id = localStorage.getItem(UID_KEY)
     if (!id) {
@@ -97,9 +98,10 @@ function flushQueue() {
  * 好友测评模式（帮别人答）不上报，保证数据是真实自测。
  * 若用户之前在首页等处提前写过反馈，合并进本条记录。
  */
-export function reportResult(primary, levelsStr, answersDetail) {
+export function reportResult(primary, levelsStr, answersDetail, tsOverride) {
   if (isFriendMode()) return
-  const ts = Date.now()
+  // 时间戳可由调用方传入：本地旅行记录与上报记录共用同一个 ts，云端补历史时才好去重
+  const ts = Number(tsOverride) || Date.now()
   lastTs = ts
   try { localStorage.setItem(LAST_KEY, String(ts)) } catch (e) { /* ignore */ }
 

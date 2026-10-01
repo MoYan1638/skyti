@@ -4,7 +4,7 @@
 import { calcDimensionScores, scoresToLevels, matchAllTypes } from './engine.js'
 import { drawRadarChart } from './chart.js'
 import { sampleQuestions, recordUsedQuestions } from './sampler.js'
-import { reportResult } from './report.js'
+import { reportResult, getUid } from './report.js'
 import { resetFeedbackDisplay } from './feedback.js'
 import { createMorph } from 'morphicons/dom'
 import pool from './data/questions-pool.json' with { type: 'json' }
@@ -346,9 +346,11 @@ function renderResult() {
       ? `🪞 神奇！你眼中的 TA 和 TA 自测都是「${friendInfo.cn}」，你们是镜像光翼！`
       : `💌 对比结果：TA 自测是「${friendInfo.cn}（${friendInfo.code}）」，你眼中的 TA 是「${primary.cn}（${primary.code}）」`)
   } else if (!replaying) {
-    saveHistory()
+    // 历史记录与上报共用同一个时间戳：云端补历史靠 ts 去重，两处不能各生成一个
+    const ts = Date.now()
+    saveHistory(ts)
     // 匿名上报：明细传「原始题库里的选项下标」（答案里存的是分值，看板无法直接映射成选项文案）
-    reportResult(primary, levelsStr, Object.keys(answersIdx).length ? answersIdx : answers)
+    reportResult(primary, levelsStr, Object.keys(answersIdx).length ? answersIdx : answers, ts)
   }
 
   // 按钮事件（onclick 赋值避免重复绑定）
@@ -378,7 +380,8 @@ function restart() {
 
 /* ─── 历史记录 ─── */
 const HISTORY_KEY = 'skyti_history_v1'
-function saveHistory() {
+let cloudSynced = false // 云端历史只拉一次，避免 renderHistory 递归
+function saveHistory(ts) {
   try {
     const arr = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
     // 存完整结果快照（类型 + 15 维等级），重看时直接还原。
@@ -389,7 +392,7 @@ function saveHistory() {
       rarity: currentResult.primary.rarity,
       levels: currentResult.levelsStr,
       date: new Date().toLocaleDateString('zh-CN'),
-      ts: Date.now()
+      ts: ts || Date.now()
     })
     localStorage.setItem(HISTORY_KEY, JSON.stringify(arr.slice(0, 20)))
   } catch (e) { /* ignore */ }
@@ -397,6 +400,7 @@ function saveHistory() {
 function renderHistory() {
   const sec = document.getElementById('history-section')
   if (!sec) return
+  syncHistoryFromCloud() // 先把服务器上本机的历史拉回来（换设备/清缓存/旧数据都能恢复）
   let arr = []
   try { arr = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]') } catch (e) { /* ignore */ }
   if (!arr.length) { sec.style.display = 'none'; return }
@@ -424,6 +428,44 @@ function renderHistory() {
     localStorage.removeItem(HISTORY_KEY)
     renderHistory()
   }
+}
+
+/* ─── 云端历史补全 ───
+   每次出结果都上报了（类型 + 15 维等级 + 匿名 uid），记录不会丢。
+   按 uid 把服务器上的历史拉回来合并进本地旅行记录：
+   换设备/清缓存、以及本次修复前留下的“只有类型没维度”的旧记录，都能恢复成可重看的快照。 */
+function syncHistoryFromCloud() {
+  if (cloudSynced) return
+  cloudSynced = true
+  const api = config.stats && config.stats.apiBase
+  const uid = getUid()
+  if (!api || !config.stats.enabled || !uid) return
+  fetch(`${api}/?action=my&uid=${encodeURIComponent(uid)}`)
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || !d.ok || !Array.isArray(d.records) || !d.records.length) return
+      let arr = []
+      try { arr = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]') } catch (e) { /* ignore */ }
+      const seen = new Set(arr.map(h => h.ts))
+      const allTypes = [...standard, ...(special || [])]
+      let added = 0
+      d.records.forEach(r => {
+        if (!r.ts || seen.has(r.ts)) return
+        if (typeof r.levels !== 'string' || r.levels.length !== dimOrder.length) return
+        const date = new Date(r.ts).toLocaleDateString('zh-CN')
+        // 本地同期那条旧记录只有类型没维度（修 bug 前存的），用云端这份替掉，避免重复展示
+        arr = arr.filter(h => !(h.code === r.code && h.date === date && typeof h.levels !== 'string'))
+        const t = allTypes.find(x => x.code === r.code)
+        arr.push({ code: r.code, cn: r.cn, rarity: t ? t.rarity : '', levels: r.levels, date, ts: r.ts })
+        seen.add(r.ts)
+        added++
+      })
+      if (!added) return
+      arr.sort((a, b) => b.ts - a.ts)
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(arr.slice(0, 20))) } catch (e) { /* ignore */ }
+      renderHistory()
+    })
+    .catch(() => { /* 后端不可用时静默，本地记录照常用 */ })
 }
 renderHistory()
 
