@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "https://skyti.moyan06.icu/demo/$1",
+      "permanent": false
+    }
+  ]
+}

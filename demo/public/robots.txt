@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
-Disallow: /stats.html
+Disallow: /demo/stats.html
 
-Sitemap: https://skytidemo.moyan06.icu/sitemap.xml
+Sitemap: https://skyti.moyan06.icu/demo/sitemap.xml

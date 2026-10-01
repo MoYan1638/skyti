@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""SkyTi 一键同步脚本：standard 为源端，同步引擎/样式/交互/题库到 demo、pro 并构建三端。
+"""SkyTi 一键同步脚本：standard 为源端，同步引擎/样式/交互/题库到 demo、pro。
+三端已合并到同一域名（skyti.moyan06.icu/{standard,demo,pro}），构建由 build-site.mjs 统一完成。
 用法：python scripts/sync_all.py [--no-build]
 """
 import json, os, shutil, subprocess, sys
@@ -7,8 +8,10 @@ import json, os, shutil, subprocess, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # monorepo2
 STD = os.path.join(ROOT, 'standard')
 VERS = ['demo', 'pro']
-DOMAINS = {'demo': 'skytidemo.moyan06.icu', 'pro': 'skytipro.moyan06.icu',
-           'standard': 'skyti.moyan06.icu'}
+# 已合并为一个域名 + 三个子路径（shareUrl / OG / sitemap 都用这个）
+DOMAINS = {'demo': 'skyti.moyan06.icu/demo', 'pro': 'skyti.moyan06.icu/pro',
+           'standard': 'skyti.moyan06.icu/standard'}
+SITE = 'https://skyti.moyan06.icu'
 OG_SUBS = {'demo': '15道题 · 快速版', 'pro': '52道题 · 全维度版', 'standard': '30道题 · 标准版'}
 TITLES = {'demo': 'SkyTi · Demo版', 'pro': 'SkyTi · Pro版', 'standard': 'SkyTi · 标准版'}
 
@@ -132,7 +135,7 @@ def sync_version(v):
     # SEO：robots.txt + sitemap.xml（按各端域名生成）
     dom = DOMAINS[v]
     with open(os.path.join(pub, 'robots.txt'), 'w', encoding='utf-8', newline='\n') as f:
-        f.write(f'User-agent: *\nAllow: /\nDisallow: /stats.html\n\nSitemap: https://{dom}/sitemap.xml\n')
+        f.write(f'User-agent: *\nAllow: /\nDisallow: /{v}/stats.html\n\nSitemap: https://{dom}/sitemap.xml\n')
     pages = [(f'https://{dom}/', '1.0', 'daily'), (f'https://{dom}/og-image.png', '0.3', 'monthly')]
     sm = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for loc, pri, freq in pages:
@@ -151,21 +154,17 @@ def sync_version(v):
                 print(f'  [{v}] 删除遗留 {f}')
     print(f'[{v}] 同步完成')
 
-def build(v):
-    base = os.path.join(ROOT, v)
-    vite = os.path.join(base, 'node_modules', 'vite', 'bin', 'vite.js')
-    r = subprocess.run(['node', vite, 'build'], cwd=base, capture_output=True, text=True, shell=True)
-    ok = 'built in' in (r.stdout + r.stderr)
-    print(f'[{v}] 构建{"✅" if ok else "❌"}')
-    if not ok:
-        print(r.stdout[-800:], r.stderr[-800:])
-    return ok
+def build_site():
+    """三端构建 + 组装成一个站点（standard/dist/{standard,demo,pro}）"""
+    script = os.path.join(ROOT, 'scripts', 'build-site.mjs')
+    r = subprocess.run(f'node "{script}"', cwd=ROOT, capture_output=True, text=True, shell=True)
+    print(r.stdout or '', end='')
+    if r.stderr:
+        print(r.stderr, end='')
+    return r.returncode == 0
 
 if __name__ == '__main__':
     for v in VERS:
         sync_version(v)
     if '--no-build' not in sys.argv:
-        ok = build('standard')
-        for v in VERS:
-            ok = build(v) and ok
-        sys.exit(0 if ok else 1)
+        sys.exit(0 if build_site() else 1)
