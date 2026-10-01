@@ -28,6 +28,12 @@ const { standard, special } = types
 const { display } = config
 
 const dimOrder = ['S1','S2','S3','E1','E2','E3','A1','A2','A3','Ac1','Ac2','Ac3','So1','So2','So3']
+/* 15 位等级串（如 "HMLLMHHMLMHLMML"）→ { 维度: L/M/H } */
+function levelsFromStr(str) {
+  const levels = {}
+  dimOrder.forEach((d, i) => { levels[d] = str[i] || 'M' })
+  return levels
+}
 
 // 每次加载：从 100 题总库按维度均衡抽样
 const allQuestions = sampleQuestions(pool.main, display.totalQuestions, dimOrder)
@@ -58,6 +64,10 @@ function rarityOf(code, fallback) {
 
 let currentIndex = 0
 let answers = {}
+let answersIdx = {}        // 题目ID → 所选选项在「原始题库」里的下标（上报明细用；展示时选项顺序会被打乱，当次下标不可复用）
+let replaying = false      // 重看历史结果时为 true：不再存历史/上报/污染抽题避让
+let replaySnapshot = null  // 重看历史用的快照（类型 + 维度等级），非空时结果页直接按其还原
+let currentResult = null   // 最近一次结果的快照，历史记录与长图都复用它
 
 /* ─── 好友测评模式（?f= 编码的好友自测结果）─── */
 function b64e(s) {
@@ -114,9 +124,12 @@ export function showPage(id) {
 document.getElementById('btn-start')?.addEventListener('click', () => {
   currentIndex = 0
   answers = {}
+  answersIdx = {}
+  replaySnapshot = null
   // 选项乱序防背题：每次开测随机打乱，同一轮内前后翻页顺序保持一致
+  // _oi 记住该选项在原始题库里的下标（打乱后仍能还原成看板可识别的选项编号）
   allQuestions.forEach(q => {
-    const a = q.options.slice()
+    const a = q.options.map((o, oi) => ({ ...o, _oi: oi }))
     for (let i = a.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[a[i], a[j]] = [a[j], a[i]]
@@ -156,7 +169,7 @@ function renderQuestion() {
 
   const optsEl = document.getElementById('options')
   optsEl.innerHTML = ''
-  q.options.forEach(opt => {
+  q.options.forEach((opt, oi) => {
     const btn = document.createElement('button')
     btn.className = 'option-btn'
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
@@ -188,7 +201,7 @@ function renderQuestion() {
         try { createMorph(mPath, ICON_CIRCLE).morphTo(ICON_CHECK) } catch (e) { mPath.setAttribute('d', ICON_CHECK) }
       })
     }
-    btn.addEventListener('click', () => selectOption(q.id, opt.value))
+    btn.addEventListener('click', () => selectOption(q.id, opt.value, opt._oi != null ? opt._oi : oi))
     optsEl.appendChild(btn)
   })
 
@@ -216,8 +229,9 @@ function renderQuestion() {
   }
 }
 
-function selectOption(qId, value) {
+function selectOption(qId, value, oi) {
   answers[qId] = value
+  if (oi != null) answersIdx[qId] = oi
   // 留 260ms 给「圆点→对勾」形变动画，再切下一题
   setTimeout(() => {
     if (currentIndex < allQuestions.length - 1) {
@@ -232,12 +246,25 @@ function selectOption(qId, value) {
 /* ─── 结果渲染 ─── */
 function renderResult() {
   resetFeedbackDisplay() // 清掉上一次的反馈展示
-  const scores = calcDimensionScores(answers, allQuestions)
-  const qCounts = {}
-  for (const q of allQuestions) qCounts[q.dim] = (qCounts[q.dim] || 0) + 1
-  const levels = scoresToLevels(scores, config.scoring.levelFractions, qCounts)
-  const matched = matchAllTypes(levels, dimOrder, standard, special)
-  const primary = matched[0]
+  let levels, matched, primary
+  if (replaySnapshot && typeof replaySnapshot.levels === 'string') {
+    // 重看历史：用当时存下的维度等级还原。
+    // 不能拿当时的答案配「本次页面加载时随机抽到的题」重算——两次抽题不是同一批，算出来必然是错的
+    levels = levelsFromStr(replaySnapshot.levels)
+    matched = matchAllTypes(levels, dimOrder, standard, special)
+    primary = matched.find(t => t.code === replaySnapshot.code) ||
+      { code: replaySnapshot.code, cn: replaySnapshot.cn, rarity: replaySnapshot.rarity, intro: '', desc: '', badge: '' }
+  } else {
+    const scores = calcDimensionScores(answers, allQuestions)
+    const qCounts = {}
+    for (const q of allQuestions) qCounts[q.dim] = (qCounts[q.dim] || 0) + 1
+    levels = scoresToLevels(scores, config.scoring.levelFractions, qCounts)
+    matched = matchAllTypes(levels, dimOrder, standard, special)
+    primary = matched[0]
+  }
+  // 本次结果的完整快照：历史记录与结果长图都复用它，避免二次重算
+  const levelsStr = dimOrder.map(d => levels[d]).join('')
+  currentResult = { levels, levelsStr, primary, matched }
 
   document.getElementById('result-code').textContent = primary.code
   document.getElementById('result-name').textContent = primary.cn
@@ -313,15 +340,15 @@ function renderResult() {
   // 记录已用题目，下次抽题避让（重看历史结果时跳过）
   if (!replaying) recordUsedQuestions(allQuestions)
 
-  // 历史记录 / 好友对比
-  const levelsStr = dimOrder.map(d => levels[d]).join('')
+  // 历史记录 / 好友对比（levelsStr 已在函数开头算好）
   if (friendInfo) {
     showFriendBanner(primary.code === friendInfo.code
       ? `🪞 神奇！你眼中的 TA 和 TA 自测都是「${friendInfo.cn}」，你们是镜像光翼！`
       : `💌 对比结果：TA 自测是「${friendInfo.cn}（${friendInfo.code}）」，你眼中的 TA 是「${primary.cn}（${primary.code}）」`)
   } else if (!replaying) {
-    saveHistory(primary)
-    reportResult(primary, levelsStr, answers) // 匿名上报（仅自测，未配置时静默跳过）
+    saveHistory()
+    // 匿名上报：明细传「原始题库里的选项下标」（答案里存的是分值，看板无法直接映射成选项文案）
+    reportResult(primary, levelsStr, Object.keys(answersIdx).length ? answersIdx : answers)
   }
 
   // 按钮事件（onclick 赋值避免重复绑定）
@@ -344,17 +371,26 @@ function renderResult() {
 function restart() {
   currentIndex = 0
   answers = {}
+  answersIdx = {}
+  replaySnapshot = null
   showPage('intro')
 }
 
 /* ─── 历史记录 ─── */
 const HISTORY_KEY = 'skyti_history_v1'
-let replaying = false // 重看历史结果时为 true：不再存历史/上报/污染抽题避让
-function saveHistory(primary) {
+function saveHistory() {
   try {
     const arr = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
-    // 连答案快照一起存，方便以后点开重看、重新生成长图
-    arr.unshift({ code: primary.code, cn: primary.cn, rarity: primary.rarity, date: new Date().toLocaleDateString('zh-CN'), ts: Date.now(), answers: JSON.parse(JSON.stringify(answers)) })
+    // 存完整结果快照（类型 + 15 维等级），重看时直接还原。
+    // 只存答案不行：下次打开页面会重新随机抽题，旧答案配新题算出来的是错结果
+    arr.unshift({
+      code: currentResult.primary.code,
+      cn: currentResult.primary.cn,
+      rarity: currentResult.primary.rarity,
+      levels: currentResult.levelsStr,
+      date: new Date().toLocaleDateString('zh-CN'),
+      ts: Date.now()
+    })
     localStorage.setItem(HISTORY_KEY, JSON.stringify(arr.slice(0, 20)))
   } catch (e) { /* ignore */ }
 }
@@ -370,14 +406,15 @@ function renderHistory() {
   arr.slice(0, 5).forEach(h => {
     const div = document.createElement('div')
     div.className = 'history-item'
-    const canReplay = h.answers && Object.keys(h.answers).length
+    // 只有存了维度等级的新快照才能重看（旧记录只有类型，重看会算出错误结果）
+    const canReplay = typeof h.levels === 'string' && h.levels.length === dimOrder.length
     div.textContent = `${h.date} · ${h.cn}（${h.code}）${canReplay ? ' · 点击重看' : ''}`
     if (canReplay) {
       div.classList.add('history-view')
       div.title = '重看这份结果，可重新保存长图'
       div.onclick = () => {
         replaying = true
-        answers = JSON.parse(JSON.stringify(h.answers))
+        replaySnapshot = { code: h.code, cn: h.cn, levels: h.levels, rarity: h.rarity }
         showPage('result')
       }
     }
@@ -402,12 +439,9 @@ document.addEventListener('keydown', e => {
 
 /* ─── 结果长图卡：Canvas 绘制 + 一键保存 ─── */
 function saveResultImage() {
-  const scores = calcDimensionScores(answers, allQuestions)
-  const qCounts = {}
-  for (const q of allQuestions) qCounts[q.dim] = (qCounts[q.dim] || 0) + 1
-  const levels = scoresToLevels(scores, config.scoring.levelFractions, qCounts)
-  const matched = matchAllTypes(levels, dimOrder, standard, special)
-  const primary = matched[0]
+  if (!currentResult) return
+  // 直接用当前结果页的快照（首次结果 / 历史重看都对），不再重算
+  const { levels, matched, primary } = currentResult
 
   const W = 750, H = 1330
   const canvas = document.createElement('canvas')
