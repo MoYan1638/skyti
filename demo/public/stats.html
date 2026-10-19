@@ -87,6 +87,15 @@
   @media (max-width:520px) {
     .grp-type { display:none; }
     .grp-latest { margin-left:0; }
+    /* 手机端：时间戳和删除按钮占一行，主体独占整行，明细不再被挤压 */
+    .rec { flex-wrap:wrap; }
+    .rec-time { order:1; }
+    .rec-del { order:2; margin-left:auto; }
+    .rec-main { order:3; flex:1 1 100%; }
+    /* 明细行改为上下两行：题目一行、答案一行 */
+    .det-row { flex-wrap:wrap; }
+    .det-q { flex:1 1 100%; }
+    .det-a { flex:0 0 auto; max-width:100%; text-align:left; margin-top:1px; }
   }
   .rec-hint { color:#5a6f95; font-size:.72em; margin:-2px 0 10px; line-height:1.5; }
   .grp-body { padding:2px 10px 4px; }
