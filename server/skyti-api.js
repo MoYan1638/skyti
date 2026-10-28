@@ -2,11 +2,13 @@
  * SkyTi API — 自建轻量后端（零依赖）
  * 数据存储：/var/lib/skyti/results.json（JSON 数组，按 ts 定位）
  * 动作：
- *   POST { action: "report",   code, cn, levels, v, ts, uid, feedback, detail }
+ *   POST { action: "report",   platform, code, cn, levels, v, ts, uid, feedback, detail }
+ *         platform: 端标识 web / douyin_mp / wechat_mp（缺省 web，老数据同）
  *   POST { action: "feedback", ts, feedback }        // 按时间戳回填意见反馈
  *   POST { action: "delete",   key, ts | tsList }    // 删除单条/多条（看板用，需 key）
- *   GET  ?action=summary                              // 公开聚合 {total, counts}（前端切真实稀有度）
- *   GET  ?action=stats                                // 拉全部数据（看板用，需 key）
+ *   GET  ?action=summary[&platform=web]               // 公开聚合 {total, counts}（前端切真实稀有度）
+ *   GET  ?action=platforms&key=                       // 各平台条数（看板主站用）
+ *   GET  ?action=stats[&platform=web]                 // 拉数据（看板用，需 key；带 platform 只回该端）
  *   GET  ?action=my&uid=xxx                           // 按匿名 uid 查「本人历史」（前端旅行记录在换设备/清缓存后恢复用）
  *   POST { action: "link", from, to }                 // 把 from 名下的记录过户到 to（老域名迁移用：uid 换了但历史要留住）
  */
@@ -39,6 +41,25 @@ function save(records) {
   fs.renameSync(tmp, DATA_FILE)
 }
 
+/**
+ * 平台白名单：新增平台时在这里加一项，看板同步加分支即可
+ * 老数据没有 platform 字段，统一按 web 处理（历史记录全部来自网页端）
+ */
+const PLATFORMS = ['web', 'douyin_mp', 'wechat_mp']
+const DEFAULT_PLATFORM = 'web'
+
+function normalizePlatform(v) {
+  const p = String(v || '').trim()
+  return PLATFORMS.indexOf(p) >= 0 ? p : ''
+}
+function platformOf(r) {
+  return normalizePlatform(r && r.platform) || DEFAULT_PLATFORM
+}
+function filterByPlatform(records, p) {
+  if (!p) return records
+  return records.filter(r => platformOf(r) === p)
+}
+
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -58,16 +79,32 @@ const server = http.createServer((req, res) => {
   const action = qs.action
 
   // 公开聚合接口：前端判断是否切真实稀有度（只有计数，无个人数据）
+  // 支持 ?platform=web|douyin_mp 只统计某一端；不传则统计全部
   if (req.method === 'GET' && action === 'summary') {
-    const records = load()
+    const p = normalizePlatform(qs.platform)
+    const records = filterByPlatform(load(), p)
     const counts = {}
     for (const r of records) counts[r.code] = (counts[r.code] || 0) + 1
-    return send(res, 200, { ok: true, total: records.length, counts })
+    return send(res, 200, { ok: true, total: records.length, counts, platform: p || 'all' })
+  }
+
+  // 各平台条数（看板主站用，需 key）
+  if (req.method === 'GET' && action === 'platforms') {
+    if (qs.key !== ADMIN_KEY) return send(res, 403, { ok: false, error: 'forbidden' })
+    const records = load()
+    const counts = {}
+    for (const r of records) counts[platformOf(r)] = (counts[platformOf(r)] || 0) + 1
+    return send(res, 200, { ok: true, total: records.length, counts, platforms: PLATFORMS })
   }
 
   if (req.method === 'GET' && action === 'stats') {
     if (qs.key !== ADMIN_KEY) return send(res, 403, { ok: false, error: 'forbidden' })
-    return send(res, 200, { ok: true, records: load() })
+    const p = normalizePlatform(qs.platform)
+    const all = load()
+    const rows = filterByPlatform(all, p)
+    const counts = {}
+    for (const r of all) counts[platformOf(r)] = (counts[platformOf(r)] || 0) + 1
+    return send(res, 200, { ok: true, records: rows, platform: p || 'all', platformCounts: counts })
   }
 
   // 按匿名 uid 查本人历史：前端旅行记录在换设备/清缓存后恢复用。
@@ -104,6 +141,8 @@ const server = http.createServer((req, res) => {
         }
       }
       const rec = {
+        // 端标识：网页端 web / 抖音小程序 douyin_mp；不认识的值一律退回 web
+        platform: normalizePlatform(data.platform) || DEFAULT_PLATFORM,
         code: String(data.code || '').slice(0, 20),
         cn: String(data.cn || '').slice(0, 50),
         levels: String(data.levels || '').slice(0, 20),
