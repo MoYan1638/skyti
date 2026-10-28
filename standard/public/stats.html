@@ -609,7 +609,7 @@ function boot() {
   $('board').style.display = 'block'
   $('in-base').value = cfg.apiBase || 'https://api.moyan06.icu'; $('in-key').value = cfg.key || ''
   // 模拟稀有度参考线（public/data/types.json）
-  fetch('data/types.json').then(r => r.ok ? r.json() : null).then(t => {
+  fetch('/data/types.json').then(r => r.ok ? r.json() : null).then(t => {
     if (!t) return
     const map = {}
     const put = o => Object.values(o || {}).forEach(x => { if (x.code && x.rarity) map[x.code] = x.rarity })
@@ -618,7 +618,7 @@ function boot() {
     render()
   }).catch(() => {})
   // 题库（答题明细展示用：qid → 题目/选项文本）
-  fetch('data/questions-pool.json').then(r => r.ok ? r.json() : null).then(p => {
+  fetch('/data/questions-pool.json').then(r => r.ok ? r.json() : null).then(p => {
     if (!p || !Array.isArray(p.main)) return
     qMap = {}
     p.main.forEach(q => { qMap[q.id] = q })
