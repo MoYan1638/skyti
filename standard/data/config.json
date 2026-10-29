@@ -22,6 +22,6 @@
   "stats": {
     "enabled": true,
     "apiBase": "https://api.moyan06.icu",
-    "minSample": 500
+    "minSample": 300
   }
 }

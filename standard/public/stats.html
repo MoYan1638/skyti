@@ -232,14 +232,20 @@ function loadCfg() {
   try { return JSON.parse(localStorage.getItem(CFG_KEY) || 'null') } catch (e) { return null }
 }
 
+let summaryTotal = null   // 全平台样本合计（真实稀有度切换口径）
+
 async function fetchAll() {
-  // 分支页直接让服务端按 platform 过滤；主站拉全量再分平台统计
+  // 分支页带 platform 让服务端过滤 + load() 前端再筛一遍（双保险）；主站拉全量再分平台统计
   const plat = CUR_PLATFORM ? `&platform=${encodeURIComponent(CUR_PLATFORM)}` : ''
   const url = `${cfg.apiBase}/?action=stats&key=${encodeURIComponent(cfg.key)}${plat}`
   const r = await fetch(url)
   if (!r.ok) throw new Error('HTTP ' + r.status)
   const data = await r.json()
   if (!data.ok) throw new Error(data.error || '未知错误')
+  // 顺带取全平台合计（公开聚合接口），供样本进度提示用
+  fetch(`${cfg.apiBase}/?action=summary`).then(x => x.json()).then(sm => {
+    if (sm && sm.ok && typeof sm.total === 'number') { summaryTotal = sm.total; render() }
+  }).catch(() => {})
   return data.records || []
 }
 
@@ -415,7 +421,8 @@ async function postDelete(body, btn, busyText) {
   const r = await fetch(`${cfg.apiBase}/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(Object.assign({ action: 'delete', key: cfg.key }, body))
+    // platform：服务端护栏——只删本平台记录，就算 ts 混进别的平台也不误伤
+    body: JSON.stringify(Object.assign({ action: 'delete', key: cfg.key, platform: CUR_PLATFORM || undefined }, body))
   })
   const data = await r.json()
   if (!data.ok) { btn.disabled = false; btn.textContent = old; throw new Error(data.error || '删除失败') }
@@ -473,25 +480,30 @@ function renderTrend(rows) {
 }
 
 function render() {
-  const rows = curVer === 'all' ? allRows : allRows.filter(r => r.v === curVer)
+  const rowsAll = curVer === 'all' ? allRows : allRows.filter(r => r.v === curVer)
+  // fbOnly 独立反馈条目只进反馈卡/CSV，不进稀有度分布、记录明细与趋势（与 summary 同口径）
+  const rows = rowsAll.filter(r => !r.fbOnly)
   const total = rows.length
   $('num-total').textContent = total
   const agg = aggregate(rows)
   $('num-types').textContent = agg.length
   $('num-users').textContent = new Set(rows.filter(r => r.uid).map(r => String(r.uid))).size
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-  $('num-today').textContent = allRows.filter(r => (r.ts || 0) >= todayStart.getTime()).length
+  $('num-today').textContent = allRows.filter(r => !r.fbOnly && (r.ts || 0) >= todayStart.getTime()).length
 
   const warn = $('warn')
-  if (total < (cfg.minSample || 500)) {
+  // 切换阈值看全平台合计（summary.total，与结果页真实稀有度同一口径），不按当前分支页计数
+  const minN = cfg.minSample || 300
+  const globalTotal = (typeof summaryTotal === 'number') ? summaryTotal : total
+  if (globalTotal < minN) {
     warn.style.display = 'block'
-    warn.textContent = `⏳ 样本累积中：${total} / ${cfg.minSample || 500}。样本不足期间，结果页继续展示模拟稀有度，攒够后可切换为真实数据。`
+    warn.textContent = `⏳ 样本累积中（全平台合计）：${globalTotal} / ${minN}。样本不足期间，结果页继续展示模拟稀有度，攒够后自动切换为真实数据。`
   } else { warn.style.display = 'none' }
 
   const maxN = agg.length ? agg[0][1].n : 1
   const list = $('list')
   renderRecords(rows)
-  renderFeedback(rows)
+  renderFeedback(rowsAll)
   renderTrend(rows)
   list.innerHTML = agg.length ? '' : '<div class="empty">暂无数据，去做个测试试试吧 ✨</div>'
   agg.forEach(([code, v], i) => {
@@ -578,7 +590,8 @@ async function load() {
     const rows = await fetchAll()
     $('btn-refresh').textContent = '↻ 刷新数据'
     if (!CUR_PLATFORM) { renderHome(rows); return }  // 主站：只渲染平台选择
-    allRows = rows                                    // 分支页：服务端已按 platform 过滤
+    // 分支页：前端强制按平台过滤（就算服务端没过滤/旧版服务端，也绝不把别的平台的记录放进可删列表）
+    allRows = rows.filter(r => platformOf(r) === CUR_PLATFORM)
     render()
   } catch (e) {
     $('btn-refresh').textContent = '↻ 刷新数据'
@@ -631,7 +644,7 @@ $('btn-save').onclick = () => {
   const base = $('in-base').value.trim().replace(/\/+$/, '')
   const key = $('in-key').value.trim()
   if (!base || !key) { alert('请填写完整'); return }
-  localStorage.setItem(CFG_KEY, JSON.stringify({ apiBase: base, key, minSample: 500 }))
+  localStorage.setItem(CFG_KEY, JSON.stringify({ apiBase: base, key, minSample: 300 }))
   boot()
 }
 $('btn-refresh').onclick = load

@@ -138,7 +138,6 @@ export function reportResult(primary, levelsStr, answersDetail, tsOverride) {
   } catch (e) { /* ignore */ }
 
   const payload = {
-    platform: 'web',   // 端标识：网页端 web（抖音小程序上报为 douyin_mp，看板按此分平台统计）
     code: primary.code,
     cn: primary.cn,
     levels: levelsStr || '',

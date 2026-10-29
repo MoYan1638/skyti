@@ -63,7 +63,7 @@
   .rec-detail { margin-top:4px; }
   .rec-detail summary { cursor:pointer; color:#7EC8E3; font-size:.92em; user-select:none; }
   .rec-detail-list { margin-top:4px; padding:6px 10px; background:rgba(6,12,26,.5); border-radius:8px; }
-  .det-row { display:flex; justify-content:space-between; gap:12px; padding:2px 0; font-size:.9em; }
+  .det-row { display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:2px 0; font-size:.9em; }
   .det-q { color:#8BA4CC; flex:1; min-width:0; word-break:break-word; }
   .det-a { color:var(--gold); text-align:right; flex-shrink:0; max-width:60%; overflow-wrap:break-word; }
   .rec-del { flex:0 0 auto; background:transparent; border:1px solid rgba(255,120,120,.5);
@@ -102,12 +102,39 @@
   .grp.fold .grp-body { display:none; }
   .card-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
   .foot { text-align:center; color:#5a6f95; font-size:.72em; margin-top:30px; }
+  /* 平台分支：主站选择页 */
+  .crumb { text-align:center; font-size:.78em; margin-bottom:14px; color:var(--dim); }
+  .crumb a { color:var(--blue); text-decoration:none; border:1px solid rgba(126,200,227,.35);
+             border-radius:16px; padding:4px 14px; }
+  .crumb a:hover { background:rgba(126,200,227,.12); }
+  .plat { display:flex; align-items:center; gap:14px; padding:14px 12px; border-radius:12px;
+          border:1px solid rgba(126,200,227,.18); background:rgba(6,12,26,.4); cursor:pointer;
+          margin-bottom:12px; transition:.18s; }
+  .plat:hover { border-color:var(--gold); background:rgba(255,217,102,.08); }
+  .plat-ic { font-size:1.6em; flex:0 0 auto; }
+  .plat-main { flex:1; min-width:0; }
+  .plat-name { color:#fff; font-weight:bold; font-size:.95em; }
+  .plat-desc { color:var(--dim); font-size:.76em; margin-top:3px; line-height:1.5; }
+  .plat-side { flex:0 0 auto; text-align:right; }
+  .plat-n { color:var(--gold); font-weight:bold; font-size:1.25em; }
+  .plat-n-l { color:var(--dim); font-size:.7em; }
+  .plat-last { color:#5a6f95; font-size:.7em; margin-top:3px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>✦ SkyTi 数据看板</h1>
-  <p class="sub">真实稀有度统计 · 仅站长可见 · 数据为匿名结果（自建接口）</p>
+  <h1 id="title">✦ SkyTi 数据看板</h1>
+  <p class="sub" id="subtitle">真实稀有度统计 · 仅站长可见 · 数据为匿名结果（自建接口）</p>
+  <div class="crumb" id="crumb" style="display:none"></div>
+
+  <div id="home" class="card" style="display:none">
+    <div style="color:#FFD966;font-size:.85em;font-weight:bold;margin-bottom:4px">选择要查看的平台</div>
+    <div style="color:#8BA4CC;font-size:.74em;margin-bottom:14px;line-height:1.6">
+      各端数据分开统计：网页端 = skyti.moyan06.icu 三端（demo / standard / pro）；抖音小程序 = SkyTi人格测试小程序。后续新增平台在这里加一项即可。
+    </div>
+    <div id="plat-list"></div>
+    <div id="plat-other" class="hint" style="display:none"></div>
+  </div>
 
   <div id="setup" class="card" style="display:none">
     <label>API 地址（默认已填好，不用改）</label>
@@ -163,6 +190,29 @@ const CFG_KEY = 'skyti_stats_cfg_v1'
 const VERSIONS = { all: '全部', standard: '标准版 30题', demo: 'Demo 15题', pro: 'Pro 52题' }
 let cfg = null, allRows = [], simMap = {}, curVer = 'all', qMap = {}
 
+/* ── 平台分支 ──
+   api.moyan06.icu            → 主站：选择看哪个平台
+   api.moyan06.icu/web        → 网页端（platform=web）
+   api.moyan06.icu/dy         → 抖音小程序（platform=douyin_mp）
+   新增平台：往 PLATFORMS 加一项，后端 PLATFORMS 白名单同步加，nginx 加一条 location */
+const PLATFORMS = [
+  { key: 'web', label: '网页端', icon: '🌐', path: '/web', desc: 'skyti.moyan06.icu · demo 15 / standard 30 / pro 52 三端' },
+  { key: 'douyin_mp', label: '抖音小程序', icon: '🎵', path: '/dy', desc: 'SkyTi人格测试 · 抖音小程序端' }
+]
+const PLAT_LABEL = {}
+PLATFORMS.forEach(p => { PLAT_LABEL[p.key] = p.label })
+
+/** 当前分支：返回平台 key，主站为 null */
+function detectPlatform() {
+  const seg = (location.pathname.split('/').filter(Boolean)[0] || '').toLowerCase()
+  const hit = PLATFORMS.find(p => p.path.replace(/^\//, '') === seg)
+  return hit ? hit.key : null
+}
+const CUR_PLATFORM = detectPlatform()
+
+/** 老记录没有 platform 字段 → 归为网页端（历史数据全部来自网页端） */
+function platformOf(r) { return (r && r.platform) ? String(r.platform) : 'web' }
+
 const $ = id => document.getElementById(id)
 const REC_LIMIT = 200
 
@@ -182,12 +232,20 @@ function loadCfg() {
   try { return JSON.parse(localStorage.getItem(CFG_KEY) || 'null') } catch (e) { return null }
 }
 
+let summaryTotal = null   // 全平台样本合计（真实稀有度切换口径）
+
 async function fetchAll() {
-  const url = `${cfg.apiBase}/?action=stats&key=${encodeURIComponent(cfg.key)}`
+  // 分支页带 platform 让服务端过滤 + load() 前端再筛一遍（双保险）；主站拉全量再分平台统计
+  const plat = CUR_PLATFORM ? `&platform=${encodeURIComponent(CUR_PLATFORM)}` : ''
+  const url = `${cfg.apiBase}/?action=stats&key=${encodeURIComponent(cfg.key)}${plat}`
   const r = await fetch(url)
   if (!r.ok) throw new Error('HTTP ' + r.status)
   const data = await r.json()
   if (!data.ok) throw new Error(data.error || '未知错误')
+  // 顺带取全平台合计（公开聚合接口），供样本进度提示用
+  fetch(`${cfg.apiBase}/?action=summary`).then(x => x.json()).then(sm => {
+    if (sm && sm.ok && typeof sm.total === 'number') { summaryTotal = sm.total; render() }
+  }).catch(() => {})
   return data.records || []
 }
 
@@ -363,7 +421,8 @@ async function postDelete(body, btn, busyText) {
   const r = await fetch(`${cfg.apiBase}/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(Object.assign({ action: 'delete', key: cfg.key }, body))
+    // platform：服务端护栏——只删本平台记录，就算 ts 混进别的平台也不误伤
+    body: JSON.stringify(Object.assign({ action: 'delete', key: cfg.key, platform: CUR_PLATFORM || undefined }, body))
   })
   const data = await r.json()
   if (!data.ok) { btn.disabled = false; btn.textContent = old; throw new Error(data.error || '删除失败') }
@@ -421,25 +480,30 @@ function renderTrend(rows) {
 }
 
 function render() {
-  const rows = curVer === 'all' ? allRows : allRows.filter(r => r.v === curVer)
+  const rowsAll = curVer === 'all' ? allRows : allRows.filter(r => r.v === curVer)
+  // fbOnly 独立反馈条目只进反馈卡/CSV，不进稀有度分布、记录明细与趋势（与 summary 同口径）
+  const rows = rowsAll.filter(r => !r.fbOnly)
   const total = rows.length
   $('num-total').textContent = total
   const agg = aggregate(rows)
   $('num-types').textContent = agg.length
   $('num-users').textContent = new Set(rows.filter(r => r.uid).map(r => String(r.uid))).size
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-  $('num-today').textContent = allRows.filter(r => (r.ts || 0) >= todayStart.getTime()).length
+  $('num-today').textContent = allRows.filter(r => !r.fbOnly && (r.ts || 0) >= todayStart.getTime()).length
 
   const warn = $('warn')
-  if (total < (cfg.minSample || 500)) {
+  // 切换阈值看全平台合计（summary.total，与结果页真实稀有度同一口径），不按当前分支页计数
+  const minN = cfg.minSample || 300
+  const globalTotal = (typeof summaryTotal === 'number') ? summaryTotal : total
+  if (globalTotal < minN) {
     warn.style.display = 'block'
-    warn.textContent = `⏳ 样本累积中：${total} / ${cfg.minSample || 500}。样本不足期间，结果页继续展示模拟稀有度，攒够后可切换为真实数据。`
+    warn.textContent = `⏳ 样本累积中（全平台合计）：${globalTotal} / ${minN}。样本不足期间，结果页继续展示模拟稀有度，攒够后自动切换为真实数据。`
   } else { warn.style.display = 'none' }
 
   const maxN = agg.length ? agg[0][1].n : 1
   const list = $('list')
   renderRecords(rows)
-  renderFeedback(rows)
+  renderFeedback(rowsAll)
   renderTrend(rows)
   list.innerHTML = agg.length ? '' : '<div class="empty">暂无数据，去做个测试试试吧 ✨</div>'
   agg.forEach(([code, v], i) => {
@@ -478,11 +542,56 @@ function renderTabs() {
   })
 }
 
+/** 主站：渲染平台选择卡片（各端条数 / 独立人数 / 最近一条） */
+function renderHome(rows) {
+  $('board').style.display = 'none'
+  $('home').style.display = 'block'
+  const list = $('plat-list')
+  list.innerHTML = ''
+  PLATFORMS.forEach(p => {
+    const sub = rows.filter(r => platformOf(r) === p.key)
+    const users = new Set(sub.filter(r => r.uid).map(r => String(r.uid))).size
+    const last = sub.length ? fmtTime(Math.max.apply(null, sub.map(r => Number(r.ts) || 0))) : '—'
+    const div = document.createElement('div')
+    div.className = 'plat'
+    div.innerHTML = `
+      <div class="plat-ic">${p.icon}</div>
+      <div class="plat-main">
+        <div class="plat-name">${esc(p.label)}</div>
+        <div class="plat-desc">${esc(p.desc)}</div>
+      </div>
+      <div class="plat-side">
+        <div class="plat-n">${sub.length}</div>
+        <div class="plat-n-l">条 · ${users} 人</div>
+        <div class="plat-last">最近 ${last}</div>
+      </div>`
+    div.onclick = () => {
+      // 带尾斜杠：nginx location 匹配更稳，也避免重定向丢 query
+      const q = cfg && cfg.key ? '?key=' + encodeURIComponent(cfg.key) : ''
+      location.href = p.path + '/' + q
+    }
+    list.appendChild(div)
+  })
+
+  // 数据里出现白名单之外的平台（将来新端上线但看板没加分支时提醒）
+  const known = PLATFORMS.map(p => p.key)
+  const other = rows.filter(r => known.indexOf(platformOf(r)) < 0)
+  const el = $('plat-other')
+  if (other.length) {
+    el.style.display = 'block'
+    const keys = Array.from(new Set(other.map(platformOf))).join('、')
+    el.textContent = `另有 ${other.length} 条记录带未知平台标识（${keys}），未在上方列出；去后端 PLATFORMS 白名单与本页 PLATFORMS 各加一项即可显示。`
+  } else { el.style.display = 'none' }
+}
+
 async function load() {
   try {
     $('btn-refresh').textContent = '加载中…'
-    allRows = await fetchAll()
+    const rows = await fetchAll()
     $('btn-refresh').textContent = '↻ 刷新数据'
+    if (!CUR_PLATFORM) { renderHome(rows); return }  // 主站：只渲染平台选择
+    // 分支页：前端强制按平台过滤（就算服务端没过滤/旧版服务端，也绝不把别的平台的记录放进可删列表）
+    allRows = rows.filter(r => platformOf(r) === CUR_PLATFORM)
     render()
   } catch (e) {
     $('btn-refresh').textContent = '↻ 刷新数据'
@@ -502,10 +611,18 @@ function boot() {
     $('setup').style.display = 'block'
     return
   }
+  // 分支页：标题与面包屑带上平台名；主站保持原标题
+  if (CUR_PLATFORM) {
+    $('title').textContent = '✦ SkyTi · ' + (PLAT_LABEL[CUR_PLATFORM] || CUR_PLATFORM) + '数据'
+    $('subtitle').textContent = '仅看「' + (PLAT_LABEL[CUR_PLATFORM] || CUR_PLATFORM) + '」这一端的数据 · 站长可见'
+    const crumb = $('crumb')
+    crumb.style.display = 'block'
+    crumb.innerHTML = '<a href="/">← 返回主站</a>'
+  }
   $('board').style.display = 'block'
   $('in-base').value = cfg.apiBase || 'https://api.moyan06.icu'; $('in-key').value = cfg.key || ''
   // 模拟稀有度参考线（public/data/types.json）
-  fetch('data/types.json').then(r => r.ok ? r.json() : null).then(t => {
+  fetch('/data/types.json').then(r => r.ok ? r.json() : null).then(t => {
     if (!t) return
     const map = {}
     const put = o => Object.values(o || {}).forEach(x => { if (x.code && x.rarity) map[x.code] = x.rarity })
@@ -514,7 +631,7 @@ function boot() {
     render()
   }).catch(() => {})
   // 题库（答题明细展示用：qid → 题目/选项文本）
-  fetch('data/questions-pool.json').then(r => r.ok ? r.json() : null).then(p => {
+  fetch('/data/questions-pool.json').then(r => r.ok ? r.json() : null).then(p => {
     if (!p || !Array.isArray(p.main)) return
     qMap = {}
     p.main.forEach(q => { qMap[q.id] = q })
@@ -527,16 +644,17 @@ $('btn-save').onclick = () => {
   const base = $('in-base').value.trim().replace(/\/+$/, '')
   const key = $('in-key').value.trim()
   if (!base || !key) { alert('请填写完整'); return }
-  localStorage.setItem(CFG_KEY, JSON.stringify({ apiBase: base, key, minSample: 500 }))
+  localStorage.setItem(CFG_KEY, JSON.stringify({ apiBase: base, key, minSample: 300 }))
   boot()
 }
 $('btn-refresh').onclick = load
 $('btn-export').onclick = () => {
   if (!allRows.length) { alert('暂无数据可导出'); return }
   // UTF-8 BOM，保证 Excel 打开中文不乱码
-  const head = 'code,cn,user,version,levels,feedback,time'
+  const head = 'platform,code,cn,user,version,levels,feedback,time'
   const csvEsc = v => `,"${String(v == null ? '' : v).replace(/"/g, '""')}"`
   const body = allRows.map(r => [
+    PLAT_LABEL[platformOf(r)] || platformOf(r),
     r.code, r.cn, r.uid || '未标记', r.v, r.levels, r.feedback || '无反馈',
     fmtTime(r.ts)
   ].map(csvEsc).join('')).join('\n')

@@ -47,7 +47,8 @@ let currentRarityStr = '' // 当前结果用的稀有度文案（长图卡复用
     if (!api) return
     const r = await fetch(`${api}/?action=summary`)
     const d = await r.json()
-    if (d.ok && d.total >= (config.stats.minSample || 500)) {
+    // 切换阈值以服务端 summary.minSample 为准（全平台样本合计），配置项只做兜底
+    if (d.ok && d.total >= (d.minSample || config.stats.minSample || 300)) {
       realStats = d
       // 若结果页已打开，重刷一次让真实稀有度生效
       if (document.getElementById('page-result')?.classList.contains('active')) renderResult()
