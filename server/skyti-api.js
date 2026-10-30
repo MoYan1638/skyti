@@ -5,11 +5,16 @@
  *   POST { action: "report",   code, cn, levels, v, ts, uid, feedback, detail }
  *   POST { action: "feedback", ts, feedback }        // 按时间戳回填意见反馈
  *   POST { action: "delete",   key, ts | tsList }    // 删除单条/多条（看板用，需 key）
- *   GET  ?action=summary                              // 公开聚合 {total, counts}（前端切真实稀有度）
+ *   GET  ?action=summary[&ch]                         // 公开聚合 {total, counts, minSample}（缺省全渠道汇总，ch 可切片）
  *   GET  ?action=stats                                // 拉全部数据（看板用，需 key）
  *   GET  ?action=my&uid=xxx                           // 按匿名 uid 查「本人历史」（前端旅行记录在换设备/清缓存后恢复用）
  *   POST { action: "link", from, to }                 // 把 from 名下的记录过户到 to（老域名迁移用：uid 换了但历史要留住）
  *   POST { action: "login",  code, uid }              // 抖音账号标识收集：tt.login 凭证换 openid（需 DOUYIN_APP_SECRET），与匿名 uid 绑定
+ *   GET  ?action=channels[&key]                       // 渠道注册表列表（公开只回启用渠道；带 admin key 回全部）
+ *   GET  ?action=channel_config&ch=xxx                // 渠道生效配置（全局+渠道合并，客户端本地兜底）
+ *   POST { action: "channel", key, channelKey, ... }  // 渠道注册/配置 upsert（需 admin key）
+ * 渠道（=记录上的 platform 字段）注册表：/var/lib/skyti/channels.json —— 渠道白名单与渠道配置的唯一事实源。
+ * 统计口径铁律：对外真实数据 = 全渠道汇总（web+抖音合计，不含 fbOnly）；对内查询/删除/配置按渠道切片。
  */
 const http = require('http')
 const https = require('https')
@@ -28,6 +33,41 @@ const DOUYIN_SECRET = process.env.DOUYIN_APP_SECRET || ''
 // 账号绑定存储：{uid, openid, code, at} 列表（独立于 results.json，不进任何统计）
 const LOGINS_FILE = path.join(DATA_DIR, 'logins.json')
 const MAX_LOGINS = 50000
+// 渠道注册表：渠道 key 白名单 + 全局/渠道配置的唯一事实源（记录上的 platform 字段即渠道 key）
+const CHANNELS_FILE = path.join(DATA_DIR, 'channels.json')
+const DEFAULT_CHANNELS = {
+  schema: 2,
+  settings: { minSample: 300 },   // 全渠道样本阈值：真实稀有度切换判定（全渠道汇总口径，不分渠道）
+  channels: {
+    web:       { name: '网页端',     enabled: true, reportEnabled: true, order: 1, ext: {} },
+    douyin_mp: { name: '抖音小程序', enabled: true, reportEnabled: true, order: 2, ext: {} }
+  }
+}
+
+function loadChannels() {
+  try {
+    const j = JSON.parse(fs.readFileSync(CHANNELS_FILE, 'utf8'))
+    if (j && typeof j === 'object' && j.channels && typeof j.channels === 'object' && !Array.isArray(j.channels)) {
+      return { schema: 2, settings: Object.assign({}, DEFAULT_CHANNELS.settings, j.settings || {}), channels: j.channels }
+    }
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_CHANNELS))
+}
+
+function saveChannels(reg) {
+  const tmp = CHANNELS_FILE + '.tmp'
+  fs.writeFileSync(tmp, JSON.stringify(reg), 'utf8')
+  fs.renameSync(tmp, CHANNELS_FILE)
+}
+
+// platform 缺省归 web（已上线 web 客户端不带该字段）；未注册渠道拒绝、停用渠道拒收——防脏数据混入统计
+function resolveChannel(platform, reg) {
+  const key = String(platform || '').slice(0, 20) || 'web'
+  const ch = reg.channels[key]
+  if (!ch) return { error: 'unknown_channel' }
+  if (ch.enabled === false || ch.reportEnabled === false) return { error: 'channel_disabled' }
+  return { key, ch }
+}
 
 function loadLogins() {
   try {
@@ -45,6 +85,7 @@ function saveLogins(logins) {
 function ensureData() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
   if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, '[]', 'utf8')
+  if (!fs.existsSync(CHANNELS_FILE)) fs.writeFileSync(CHANNELS_FILE, JSON.stringify(DEFAULT_CHANNELS), 'utf8')
 }
 
 function load() {
@@ -79,21 +120,28 @@ const server = http.createServer((req, res) => {
   const action = qs.action
 
   // 公开聚合接口：前端判断是否切真实稀有度（只有计数，无个人数据）
-  // minSample 是「切换真实稀有度」的全平台样本阈值（web + 抖音端合计），三端共用这一个事实源
+  // 统计口径铁律：对外真实数据 = 全渠道汇总（web + 抖音合计，不含 fbOnly）；minSample 是「切换真实稀有度」的
+  // 全渠道样本阈值，三端共用这一个事实源。ch 参数仅供看板切片，不改变对外口径。
   if (req.method === 'GET' && action === 'summary') {
-    const records = load().filter(r => !r.fbOnly)   // 独立反馈条目不进稀有度统计
+    const reg = loadChannels()
+    const want = String(qs.ch || '').slice(0, 20)
+    let records = load().filter(r => !r.fbOnly)   // 独立反馈条目不进稀有度统计
+    if (want) {
+      if (!reg.channels[want]) return send(res, 400, { ok: false, error: 'unknown_channel' })
+      records = records.filter(r => (r.platform ? String(r.platform) : 'web') === want)
+    }
     const counts = {}
     for (const r of records) counts[r.code] = (counts[r.code] || 0) + 1
-    return send(res, 200, { ok: true, total: records.length, counts, minSample: 300 })
+    return send(res, 200, { ok: true, total: records.length, counts, minSample: Number(reg.settings.minSample) || 300 })
   }
 
   if (req.method === 'GET' && action === 'stats') {
     if (qs.key !== ADMIN_KEY) return send(res, 403, { ok: false, error: 'forbidden' })
-    // 按平台过滤（看板分支页依赖）：无 platform 参数 = 全量（主站汇总用）
-    const PLATFORMS = ['web', 'douyin_mp']
-    const want = String(qs.platform || '')
+    // 按渠道过滤（看板分支页依赖，ch 与 platform 同义）：无参数 = 全量（主站汇总用）；白名单读渠道注册表
+    const reg = loadChannels()
+    const want = String(qs.ch || qs.platform || '').slice(0, 20)
     let records = load()
-    if (want && PLATFORMS.indexOf(want) >= 0) {
+    if (want && reg.channels[want]) {
       records = records.filter(r => (r.platform ? String(r.platform) : 'web') === want)
     }
     return send(res, 200, { ok: true, records })
@@ -110,6 +158,45 @@ const server = http.createServer((req, res) => {
       .slice(-20)
       .map(r => ({ code: r.code, cn: r.cn, levels: r.levels, v: r.v, ts: r.ts }))
     return send(res, 200, { ok: true, records })
+  }
+
+  // 渠道注册表列表（公开只回启用渠道；带 admin key 回全部，看板渠道管理面板用）
+  if (req.method === 'GET' && action === 'channels') {
+    const reg = loadChannels()
+    const isAdmin = qs.key === ADMIN_KEY
+    const channels = Object.keys(reg.channels)
+      .filter(k => isAdmin || reg.channels[k].enabled !== false)
+      .map(k => {
+        const c = reg.channels[k]
+        return {
+          key: k,
+          name: String(c.name || k).slice(0, 30),
+          enabled: c.enabled !== false,
+          reportEnabled: c.reportEnabled !== false,
+          order: Number(c.order) || 0
+        }
+      })
+      .sort((a, b) => a.order - b.order)
+    return send(res, 200, { ok: true, channels, minSample: Number(reg.settings.minSample) || 300 })
+  }
+
+  // 渠道生效配置（全局+渠道合并）：客户端启动拉取，失败回落本地 config（沿用 minSample 兜底模式）
+  if (req.method === 'GET' && action === 'channel_config') {
+    const reg = loadChannels()
+    const key = String(qs.ch || '').slice(0, 20)
+    const ch = reg.channels[key]
+    if (!ch) return send(res, 404, { ok: false, error: 'unknown_channel' })
+    return send(res, 200, {
+      ok: true,
+      minSample: Number(reg.settings.minSample) || 300,
+      channel: {
+        key,
+        name: String(ch.name || key).slice(0, 30),
+        enabled: ch.enabled !== false,
+        reportEnabled: ch.reportEnabled !== false,
+        ext: (ch.ext && typeof ch.ext === 'object' && !Array.isArray(ch.ext)) ? ch.ext : {}
+      }
+    })
   }
 
   if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'method not allowed' })
@@ -132,10 +219,12 @@ const server = http.createServer((req, res) => {
           detail[String(k).slice(0, 12)] = Number.isFinite(val) ? val : -1
         }
       }
-      // 平台标识：网页端 web / 抖音小程序 douyin_mp；不带或不认识的值一律归 web（老数据无此字段同）
-      const plat = String(data.platform || '').slice(0, 20)
+      // 渠道标识（platform）：缺省归 web（已上线 web 客户端不带该字段）；未注册/停用渠道拒绝，白名单读渠道注册表
+      const reg = loadChannels()
+      const cv = resolveChannel(data.platform, reg)
+      if (cv.error) return send(res, cv.error === 'unknown_channel' ? 400 : 403, { ok: false, error: cv.error })
       const rec = {
-        platform: ['web', 'douyin_mp'].indexOf(plat) >= 0 ? plat : 'web',
+        platform: cv.key,
         code: String(data.code || '').slice(0, 20),
         cn: String(data.cn || '').slice(0, 50),
         levels: String(data.levels || '').slice(0, 20),
@@ -200,6 +289,10 @@ const server = http.createServer((req, res) => {
       const uid = String(data.uid || '').slice(0, 24)
       const fbId = String(data.fbId || '').slice(0, 48)
       if (!fb) return send(res, 400, { ok: false, error: 'missing feedback' })
+      // 渠道校验与结果上报同口径（缺省 web、未注册拒绝、停用拒收），追加与独立条目两条路径都拦住
+      const freg = loadChannels()
+      const fcv = resolveChannel(data.platform, freg)
+      if (fcv.error) return send(res, fcv.error === 'unknown_channel' ? 400 : 403, { ok: false, error: fcv.error })
       const records = load()
       if (fbId) {
         const dup = records.some(r =>
@@ -222,9 +315,8 @@ const server = http.createServer((req, res) => {
         return send(res, 200, { ok: true, updated: 1 })
       }
       // 独立反馈条目：fbOnly 不进统计/旅行记录，但保留在数据里可查（platform 与结果同口径归类）
-      const fplat = String(data.platform || '').slice(0, 20)
       records.push({
-        platform: ['web', 'douyin_mp'].indexOf(fplat) >= 0 ? fplat : 'web',
+        platform: fcv.key,
         code: 'FEEDBACK', cn: '意见反馈', levels: '', v: '',
         ts: Date.now(), uid, feedback: fb, fbId, refTs, fbOnly: true, detail: null
       })
@@ -280,10 +372,10 @@ const server = http.createServer((req, res) => {
         : (data.ts != null && Number(data.ts) > 0 ? [Number(data.ts)] : [])
       if (!tsList.length) return send(res, 400, { ok: false, error: 'missing ts' })
       const set = new Set(tsList)
-      // 平台护栏：带 platform 时只删该平台的记录——就算 ts 混进别的平台也不误伤
-      const PLATFORMS = ['web', 'douyin_mp']
-      const scope = String(data.platform || '')
-      const scoped = scope && PLATFORMS.indexOf(scope) >= 0
+      // 平台护栏：带 platform 时只删该渠道的记录——就算 ts 混进别的渠道也不误伤（白名单读渠道注册表）
+      const reg = loadChannels()
+      const scope = String(data.platform || '').slice(0, 20)
+      const scoped = scope && !!reg.channels[scope]
       const platOf = r => (r.platform ? String(r.platform) : 'web')
       const inScope = r => !scoped || platOf(r) === scope
       const records = load()
@@ -302,6 +394,25 @@ const server = http.createServer((req, res) => {
         save(records.filter(r => !removedSet.has(r)))
       }
       return send(res, 200, { ok: true, removed: removedRecs.length })
+    }
+
+    // 渠道注册/配置 upsert（看板渠道管理面板用）：只增改不删——退役走 enabled:false，历史数据保持可解释
+    if (data.action === 'channel') {
+      if (data.key !== ADMIN_KEY) return send(res, 403, { ok: false, error: 'forbidden' })
+      const key = String(data.channelKey || '').slice(0, 20)
+      if (!/^[a-z0-9_]{2,20}$/.test(key)) return send(res, 400, { ok: false, error: 'bad channel key' })
+      const reg = loadChannels()
+      const prev = reg.channels[key] || {}
+      const ch = {
+        name: String(data.name != null ? data.name : (prev.name || key)).slice(0, 30) || key,
+        enabled: data.enabled != null ? !!data.enabled : prev.enabled !== false,
+        reportEnabled: data.reportEnabled != null ? !!data.reportEnabled : prev.reportEnabled !== false,
+        order: Number(data.order != null ? data.order : prev.order) || 0,
+        ext: (data.ext && typeof data.ext === 'object' && !Array.isArray(data.ext)) ? data.ext : (prev.ext || {})
+      }
+      reg.channels[key] = ch
+      saveChannels(reg)
+      return send(res, 200, { ok: true, channel: Object.assign({ key }, ch) })
     }
 
     send(res, 400, { ok: false, error: 'unknown action' })

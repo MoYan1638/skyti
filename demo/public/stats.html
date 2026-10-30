@@ -44,6 +44,8 @@
   #trend { display:flex; align-items:flex-end; gap:3px; height:96px; }
   #trend .t-col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
   #trend .t-bar { width:100%; min-height:2px; background:linear-gradient(180deg,#FFD966,#7EC8E3); border-radius:2px 2px 0 0; }
+  #trend .t-bar.stack { background:transparent; display:flex; flex-direction:column-reverse; overflow:hidden; }
+  #trend .t-seg { width:100%; }
   #trend .t-n { font-size:.6em; color:#8BA4CC; margin-bottom:2px; }
   #trend .t-l { font-size:.56em; color:#5a6f95; margin-top:3px; white-space:nowrap; }
   .legend i { display:inline-block; width:14px; height:8px; border-radius:2px;
@@ -128,12 +130,22 @@
   <div class="crumb" id="crumb" style="display:none"></div>
 
   <div id="home" class="card" style="display:none">
-    <div style="color:#FFD966;font-size:.85em;font-weight:bold;margin-bottom:4px">选择要查看的平台</div>
+    <div style="color:#FFD966;font-size:.85em;font-weight:bold;margin-bottom:4px">选择要查看的渠道</div>
     <div style="color:#8BA4CC;font-size:.74em;margin-bottom:14px;line-height:1.6">
-      各端数据分开统计：网页端 = skyti.moyan06.icu 三端（demo / standard / pro）；抖音小程序 = SkyTi人格测试小程序。后续新增平台在这里加一项即可。
+      渠道列表来自服务端渠道注册表（名称/启停在下方「渠道管理」里改）。数据统一存储、按渠道切片管理；真实数据展示与统计为全渠道汇总口径（web + 抖音合计）。
     </div>
     <div id="plat-list"></div>
     <div id="plat-other" class="hint" style="display:none"></div>
+    <details class="card" id="ch-admin" style="display:none;margin-top:14px;background:rgba(6,12,26,.35)">
+      <summary style="cursor:pointer;color:#FFD966;font-size:.85em;font-weight:bold">⚙ 渠道管理（管理员）</summary>
+      <div class="hint">渠道注册表 = 渠道白名单与渠道配置的唯一事实源。停用后该渠道拒收新数据、历史仍可查看；只增改不删（退役走停用）。新渠道先在这里注册 key，再按接入契约接客户端。</div>
+      <div id="ch-admin-list"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <input id="ch-new-key" placeholder="新渠道 key（小写字母/数字/下划线）" style="flex:1;min-width:10em" />
+        <input id="ch-new-name" placeholder="展示名" style="flex:1;min-width:8em" />
+        <button class="btn" id="ch-add" style="margin-top:0">添加渠道</button>
+      </div>
+    </details>
   </div>
 
   <div id="setup" class="card" style="display:none">
@@ -147,6 +159,7 @@
 
   <div id="board" style="display:none">
     <div id="warn" class="warn" style="display:none"></div>
+    <p class="hint" style="text-align:center;margin:-6px 0 14px">📊 统计口径：真实数据 = 全渠道汇总（web + 抖音合计，不含独立反馈）；各渠道页为切片视图</p>
     <div class="card stats-row">
       <div><div class="stats-num" id="num-total">–</div><div class="stats-label">累计样本</div></div>
       <div><div class="stats-num" id="num-types">–</div><div class="stats-label">覆盖人格数 / 28</div></div>
@@ -168,7 +181,8 @@
       <div class="rec-more" id="rec-more" style="display:none"></div>
     </div>
     <div class="card" id="trend-card" style="display:none">
-      <div style="color:#FFD966;font-size:.85em;font-weight:bold;margin-bottom:10px">📈 近 14 天答题趋势</div>
+      <div style="color:#FFD966;font-size:.85em;font-weight:bold;margin-bottom:10px" id="trend-title">📈 近 14 天答题趋势</div>
+      <div id="trend-legend" class="legend" style="margin:-4px 0 8px;display:none"></div>
       <div id="trend"></div>
     </div>
     <div class="card" id="fb-card" style="display:none">
@@ -190,17 +204,27 @@ const CFG_KEY = 'skyti_stats_cfg_v1'
 const VERSIONS = { all: '全部', standard: '标准版 30题', demo: 'Demo 15题', pro: 'Pro 52题' }
 let cfg = null, allRows = [], simMap = {}, curVer = 'all', qMap = {}
 
-/* ── 平台分支 ──
-   api.moyan06.icu            → 主站：选择看哪个平台
+/* ── 渠道分支 ──
+   api.moyan06.icu            → 主站：渠道选择（含「全渠道汇总」入口与渠道管理面板）
    api.moyan06.icu/web        → 网页端（platform=web）
    api.moyan06.icu/dy         → 抖音小程序（platform=douyin_mp）
-   新增平台：往 PLATFORMS 加一项，后端 PLATFORMS 白名单同步加，nginx 加一条 location */
+   渠道的名称/启停/排序以服务端渠道注册表（?action=channels）为事实源，启动时自动同步；
+   path（nginx 分支路由）/icon/desc 是看板本地元数据。新增渠道：服务端注册表加 key + CHANNEL_META 加一项 + nginx 加 location */
+const CHANNEL_META = {
+  web: { icon: '🌐', path: '/web', desc: 'skyti.moyan06.icu · demo 15 / standard 30 / pro 52 三端' },
+  douyin_mp: { icon: '🎵', path: '/dy', desc: 'SkyTi人格测试 · 抖音小程序端' }
+}
 const PLATFORMS = [
-  { key: 'web', label: '网页端', icon: '🌐', path: '/web', desc: 'skyti.moyan06.icu · demo 15 / standard 30 / pro 52 三端' },
-  { key: 'douyin_mp', label: '抖音小程序', icon: '🎵', path: '/dy', desc: 'SkyTi人格测试 · 抖音小程序端' }
+  { key: 'web', label: '网页端', icon: '🌐', path: '/web', desc: 'skyti.moyan06.icu · demo 15 / standard 30 / pro 52 三端', enabled: true, reportEnabled: true, order: 1 },
+  { key: 'douyin_mp', label: '抖音小程序', icon: '🎵', path: '/dy', desc: 'SkyTi人格测试 · 抖音小程序端', enabled: true, reportEnabled: true, order: 2 }
 ]
 const PLAT_LABEL = {}
 PLATFORMS.forEach(p => { PLAT_LABEL[p.key] = p.label })
+
+/* 渠道配色：趋势分段与图例用（注册表外的渠道从色池取色，不静默丢量） */
+const CH_COLOR = { web: '#7EC8E3', douyin_mp: '#FFD966' }
+const CH_COLOR_POOL = ['#9b7fe0', '#6ee7b7', '#f472b6', '#fbbf24', '#60a5fa']
+function chColor(key, i) { return CH_COLOR[key] || CH_COLOR_POOL[i % CH_COLOR_POOL.length] }
 
 /** 当前分支：返回平台 key，主站为 null */
 function detectPlatform() {
@@ -209,6 +233,48 @@ function detectPlatform() {
   return hit ? hit.key : null
 }
 const CUR_PLATFORM = detectPlatform()
+/** 全渠道汇总视图（主站 ?view=all）：不分渠道切片，展示统一口径的全量数据 */
+const VIEW_ALL = !CUR_PLATFORM && new URLSearchParams(location.search).get('view') === 'all'
+
+/** 面包屑：分支页回主站；全渠道视图带各渠道快捷链接（渠道 Tab） */
+function renderCrumb() {
+  const crumb = $('crumb')
+  if (CUR_PLATFORM) {
+    crumb.style.display = 'block'
+    crumb.innerHTML = '<a href="/">← 返回主站</a>'
+  } else if (VIEW_ALL) {
+    crumb.style.display = 'block'
+    const q = cfg && cfg.key ? '?key=' + encodeURIComponent(cfg.key) : ''
+    crumb.innerHTML = '<a href="/">← 返回主站</a>' + PLATFORMS.filter(p => p.path).map(p =>
+      ` <a href="${p.path}/${q}">${esc(p.label)}</a>`).join('')
+  } else {
+    crumb.style.display = 'none'
+  }
+}
+
+/** 启动时把服务端渠道注册表（名称/启停/排序）同步进 PLATFORMS；失败保留本地兜底列表 */
+async function syncChannels() {
+  try {
+    const r = await fetch(`${cfg.apiBase}/?action=channels${cfg.key ? '&key=' + encodeURIComponent(cfg.key) : ''}`)
+    const d = await r.json()
+    if (!d.ok || !Array.isArray(d.channels) || !d.channels.length) return
+    const merged = d.channels.map((c, i) => {
+      const meta = CHANNEL_META[c.key] || {}
+      return {
+        key: c.key, label: c.name || c.key,
+        icon: meta.icon || '📦', path: meta.path || '', desc: meta.desc || '（看板未配置本地元数据）',
+        enabled: c.enabled !== false, reportEnabled: c.reportEnabled !== false, order: Number(c.order) || i
+      }
+    })
+    PLATFORMS.length = 0
+    merged.forEach(p => PLATFORMS.push(p))
+    Object.keys(PLAT_LABEL).forEach(k => { delete PLAT_LABEL[k] })
+    PLATFORMS.forEach(p => { PLAT_LABEL[p.key] = p.label })
+    renderCrumb()
+    if (!CUR_PLATFORM && !VIEW_ALL) renderHome(lastRows)
+    renderChannelAdmin()
+  } catch (e) {}
+}
 
 /** 老记录没有 platform 字段 → 归为网页端（历史数据全部来自网页端） */
 function platformOf(r) { return (r && r.platform) ? String(r.platform) : 'web' }
@@ -233,6 +299,7 @@ function loadCfg() {
 }
 
 let summaryTotal = null   // 全平台样本合计（真实稀有度切换口径）
+let lastRows = []         // 最近一次拉取的原始行（渠道同步后重渲染用）
 
 async function fetchAll() {
   // 分支页带 platform 让服务端过滤 + load() 前端再筛一遍（双保险）；主站拉全量再分平台统计
@@ -311,8 +378,10 @@ function recordEl(r) {
   div.className = 'rec'
   const fb = r.feedback && r.feedback !== '无反馈'
     ? `<span class="rec-fb">💬 ${esc(r.feedback)}</span>` : ''
+  // 全渠道视图下每条记录标注渠道；分支页内渠道统一不必标
+  const chBadge = VIEW_ALL ? ` · <i>${esc(PLAT_LABEL[platformOf(r)] || platformOf(r))}</i>` : ''
   div.innerHTML = `<span class="rec-time">${fmtTime(r.ts)}</span>
-    <span class="rec-main"><b>${esc(r.cn || '未知')}</b> <em>${esc(r.code || '')}</em> · <i>${esc(VERSIONS[r.v] || r.v || '?')}</i>${fb}</span>`
+    <span class="rec-main"><b>${esc(r.cn || '未知')}</b> <em>${esc(r.code || '')}</em> · <i>${esc(VERSIONS[r.v] || r.v || '?')}</i>${chBadge}${fb}</span>`
   // 答题明细（题目ID → 选项），点击展开逐题对照题库展示
   if (r.detail && typeof r.detail === 'object') {
     const entries = Object.entries(r.detail)
@@ -336,7 +405,7 @@ function recordEl(r) {
   const btn = document.createElement('button')
   btn.className = 'rec-del'
   btn.textContent = '删除'
-  btn.onclick = () => delRecord(r.ts, btn)
+  btn.onclick = () => delRecord(r.ts, btn, platformOf(r))
   div.appendChild(btn)
   return div
 }
@@ -414,41 +483,55 @@ function renderRecords(rows) {
   }
 }
 
-async function postDelete(body, btn, busyText) {
+async function postDelete(body, btn, busyText, platform) {
   const old = btn.textContent
   btn.disabled = true
   btn.textContent = busyText
   const r = await fetch(`${cfg.apiBase}/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    // platform：服务端护栏——只删本平台记录，就算 ts 混进别的平台也不误伤
-    body: JSON.stringify(Object.assign({ action: 'delete', key: cfg.key, platform: CUR_PLATFORM || undefined }, body))
+    // platform：服务端护栏——只删本渠道记录，就算 ts 混进别的渠道也不误伤；全渠道视图用记录自身的渠道
+    body: JSON.stringify(Object.assign({ action: 'delete', key: cfg.key, platform: platform || CUR_PLATFORM || undefined }, body))
   })
   const data = await r.json()
   if (!data.ok) { btn.disabled = false; btn.textContent = old; throw new Error(data.error || '删除失败') }
   return data
 }
 
-async function delRecord(ts, btn) {
+async function delRecord(ts, btn, platform) {
   if (!ts) { alert('这条记录没有时间戳，无法删除'); return }
   if (!confirm(`确定删除这条记录吗？\n${fmtTime(ts)}\n删除后不可恢复。`)) return
   try {
-    await postDelete({ ts: Number(ts) }, btn, '删除中…')
+    await postDelete({ ts: Number(ts) }, btn, '删除中…', platform)
     allRows = allRows.filter(x => Number(x.ts) !== Number(ts))
     render()
   } catch (e) { alert('删除失败：' + e.message) }
 }
 
 async function delGroup(key, items, btn) {
-  const tsList = items.map(r => Number(r.ts)).filter(n => n > 0)
-  if (!tsList.length) { alert('这组记录没有时间戳，无法删除'); return }
-  if (!confirm(`确定删除「旅人 ${key.slice(-6)}」的全部 ${tsList.length} 条记录吗？\n删除后不可恢复。`)) return
+  const tsAll = items.map(r => Number(r.ts)).filter(n => n > 0)
+  if (!tsAll.length) { alert('这组记录没有时间戳，无法删除'); return }
+  if (!confirm(`确定删除「旅人 ${key.slice(-6)}」的全部 ${tsAll.length} 条记录吗？\n删除后不可恢复。`)) return
   try {
-    const data = await postDelete({ tsList }, btn, '删除中…')
-    const set = new Set(tsList)
+    // 按渠道拆分删除：全渠道视图下同组可能跨渠道，每批都走「本渠道护栏」，绝不误伤别端
+    const byPlat = new Map()
+    items.forEach(r => {
+      const n = Number(r.ts)
+      if (n > 0) {
+        const p = platformOf(r)
+        if (!byPlat.has(p)) byPlat.set(p, [])
+        byPlat.get(p).push(n)
+      }
+    })
+    let removed = 0
+    for (const [p, tsList] of byPlat) {
+      const data = await postDelete({ tsList }, btn, '删除中…', p)
+      removed += data.removed || 0
+    }
+    const set = new Set(tsAll)
     allRows = allRows.filter(x => !set.has(Number(x.ts)))
     render()
-    if (data.removed !== tsList.length) alert(`服务端实际删除 ${data.removed} 条（可能有记录已被删过）。`)
+    if (removed !== tsAll.length) alert(`服务端实际删除 ${removed} 条（可能有记录已被删过）。`)
   } catch (e) { alert('删除失败：' + e.message) }
 }
 
@@ -457,13 +540,17 @@ function renderTrend(rows) {
   const start = new Date(); start.setHours(0, 0, 0, 0)
   for (let i = 13; i >= 0; i--) {
     const d = new Date(start.getTime() - i * 86400000)
-    days.push({ t: d.getTime(), label: `${d.getMonth() + 1}/${d.getDate()}`, n: 0 })
+    days.push({ t: d.getTime(), label: `${d.getMonth() + 1}/${d.getDate()}`, n: 0, by: {} })
   }
   rows.forEach(r => {
     if (!r.ts) return
     const d = new Date(r.ts); d.setHours(0, 0, 0, 0)
     const hit = days.find(x => x.t === d.getTime())
-    if (hit) hit.n++
+    if (hit) {
+      hit.n++
+      const p = platformOf(r)
+      hit.by[p] = (hit.by[p] || 0) + 1
+    }
   })
   const max = Math.max(...days.map(d => d.n), 1)
   const el = $('trend')
@@ -471,12 +558,32 @@ function renderTrend(rows) {
   days.forEach(d => {
     const col = document.createElement('div')
     col.className = 't-col'
+    const h = (d.n / max * 70).toFixed(0)
+    let bar
+    if (VIEW_ALL) {
+      // 全渠道视图：按渠道分段堆叠（渠道色），一眼看出各渠道贡献
+      const segs = PLATFORMS.map((p, i) => ({ key: p.key, n: d.by[p.key] || 0, color: chColor(p.key, i) })).filter(s => s.n > 0)
+      Object.keys(d.by).forEach(k => {
+        if (!segs.some(s => s.key === k)) segs.push({ key: k, n: d.by[k], color: chColor(k, segs.length) })
+      })
+      bar = `<div class="t-bar stack" style="height:${h}px">` + segs.map(s =>
+        `<div class="t-seg" style="flex:${s.n};background:${s.color}" title="${esc(PLAT_LABEL[s.key] || s.key)}：${s.n} 人"></div>`).join('') + '</div>'
+    } else {
+      bar = `<div class="t-bar" style="height:${h}px"></div>`
+    }
     col.innerHTML = `<span class="t-n">${d.n || ''}</span>
-      <div class="t-bar" style="height:${(d.n / max * 70).toFixed(0)}px" title="${d.label}：${d.n} 人"></div>
+      ${bar}
       <span class="t-l">${d.label}</span>`
     el.appendChild(col)
   })
   $('trend-card').style.display = 'block'
+  $('trend-title').textContent = VIEW_ALL ? '📈 近 14 天答题趋势（按渠道分段）' : '📈 近 14 天答题趋势'
+  const lg = $('trend-legend')
+  if (VIEW_ALL) {
+    lg.style.display = 'block'
+    lg.innerHTML = PLATFORMS.map((p, i) => `<i style="background:${chColor(p.key, i)}"></i>${esc(p.label)}`).join(' ') +
+      '　每根柱 = 当日答题数，按渠道分段'
+  } else { lg.style.display = 'none' }
 }
 
 function render() {
@@ -542,22 +649,45 @@ function renderTabs() {
   })
 }
 
-/** 主站：渲染平台选择卡片（各端条数 / 独立人数 / 最近一条） */
+/** 主站：渲染渠道选择卡片（全渠道汇总入口 + 各渠道条数/独立人数/最近一条） */
 function renderHome(rows) {
   $('board').style.display = 'none'
   $('home').style.display = 'block'
   const list = $('plat-list')
   list.innerHTML = ''
+  // 全渠道汇总入口：真实数据统一口径的总览视图（?view=all）
+  const statRows = rows.filter(r => !r.fbOnly)
+  const usersAll = new Set(statRows.filter(r => r.uid).map(r => String(r.uid))).size
+  const lastAll = statRows.length ? fmtTime(Math.max.apply(null, statRows.map(r => Number(r.ts) || 0))) : '—'
+  const allDiv = document.createElement('div')
+  allDiv.className = 'plat'
+  allDiv.innerHTML = `
+      <div class="plat-ic">📊</div>
+      <div class="plat-main">
+        <div class="plat-name">全渠道汇总</div>
+        <div class="plat-desc">所有渠道统一口径的真实数据总览（web + 抖音合计）</div>
+      </div>
+      <div class="plat-side">
+        <div class="plat-n">${statRows.length}</div>
+        <div class="plat-n-l">条 · ${usersAll} 人</div>
+        <div class="plat-last">最近 ${lastAll}</div>
+      </div>`
+  allDiv.onclick = () => {
+    const q = cfg && cfg.key ? 'key=' + encodeURIComponent(cfg.key) + '&' : ''
+    location.href = '/?' + q + 'view=all'
+  }
+  list.appendChild(allDiv)
   PLATFORMS.forEach(p => {
     const sub = rows.filter(r => platformOf(r) === p.key)
     const users = new Set(sub.filter(r => r.uid).map(r => String(r.uid))).size
     const last = sub.length ? fmtTime(Math.max.apply(null, sub.map(r => Number(r.ts) || 0))) : '—'
     const div = document.createElement('div')
     div.className = 'plat'
+    const off = p.enabled === false ? ' · 已停用' : ''
     div.innerHTML = `
       <div class="plat-ic">${p.icon}</div>
       <div class="plat-main">
-        <div class="plat-name">${esc(p.label)}</div>
+        <div class="plat-name">${esc(p.label)}${off}</div>
         <div class="plat-desc">${esc(p.desc)}</div>
       </div>
       <div class="plat-side">
@@ -566,6 +696,7 @@ function renderHome(rows) {
         <div class="plat-last">最近 ${last}</div>
       </div>`
     div.onclick = () => {
+      if (!p.path) { alert('该渠道未配置看板分支路由（CHANNEL_META.path），先在看板加元数据并配 nginx'); return }
       // 带尾斜杠：nginx location 匹配更稳，也避免重定向丢 query
       const q = cfg && cfg.key ? '?key=' + encodeURIComponent(cfg.key) : ''
       location.href = p.path + '/' + q
@@ -573,14 +704,14 @@ function renderHome(rows) {
     list.appendChild(div)
   })
 
-  // 数据里出现白名单之外的平台（将来新端上线但看板没加分支时提醒）
+  // 数据里出现注册表之外的渠道（新端已有数据但看板未同步时提醒）
   const known = PLATFORMS.map(p => p.key)
   const other = rows.filter(r => known.indexOf(platformOf(r)) < 0)
   const el = $('plat-other')
   if (other.length) {
     el.style.display = 'block'
     const keys = Array.from(new Set(other.map(platformOf))).join('、')
-    el.textContent = `另有 ${other.length} 条记录带未知平台标识（${keys}），未在上方列出；去后端 PLATFORMS 白名单与本页 PLATFORMS 各加一项即可显示。`
+    el.textContent = `另有 ${other.length} 条记录带未知渠道标识（${keys}），未在上方列出；在「渠道管理」注册该渠道 key 即可显示。`
   } else { el.style.display = 'none' }
 }
 
@@ -589,9 +720,10 @@ async function load() {
     $('btn-refresh').textContent = '加载中…'
     const rows = await fetchAll()
     $('btn-refresh').textContent = '↻ 刷新数据'
-    if (!CUR_PLATFORM) { renderHome(rows); return }  // 主站：只渲染平台选择
-    // 分支页：前端强制按平台过滤（就算服务端没过滤/旧版服务端，也绝不把别的平台的记录放进可删列表）
-    allRows = rows.filter(r => platformOf(r) === CUR_PLATFORM)
+    lastRows = rows
+    if (!CUR_PLATFORM && !VIEW_ALL) { renderHome(rows); return }  // 主站：只渲染渠道选择
+    // 分支页/全渠道视图：分支页前端强制按渠道过滤（就算服务端没过滤/旧版服务端，也绝不把别的渠道的记录放进可删列表）
+    allRows = CUR_PLATFORM ? rows.filter(r => platformOf(r) === CUR_PLATFORM) : rows
     render()
   } catch (e) {
     $('btn-refresh').textContent = '↻ 刷新数据'
@@ -611,14 +743,16 @@ function boot() {
     $('setup').style.display = 'block'
     return
   }
-  // 分支页：标题与面包屑带上平台名；主站保持原标题
+  // 分支页/全渠道视图：标题与面包屑带上渠道名；主站保持原标题
   if (CUR_PLATFORM) {
     $('title').textContent = '✦ SkyTi · ' + (PLAT_LABEL[CUR_PLATFORM] || CUR_PLATFORM) + '数据'
     $('subtitle').textContent = '仅看「' + (PLAT_LABEL[CUR_PLATFORM] || CUR_PLATFORM) + '」这一端的数据 · 站长可见'
-    const crumb = $('crumb')
-    crumb.style.display = 'block'
-    crumb.innerHTML = '<a href="/">← 返回主站</a>'
+  } else if (VIEW_ALL) {
+    $('title').textContent = '✦ SkyTi · 全渠道汇总'
+    $('subtitle').textContent = '真实数据 = 全渠道统一口径 · 仅站长可见'
   }
+  renderCrumb()
+  syncChannels()
   $('board').style.display = 'block'
   $('in-base').value = cfg.apiBase || 'https://api.moyan06.icu'; $('in-key').value = cfg.key || ''
   // 模拟稀有度参考线（public/data/types.json）
@@ -640,6 +774,47 @@ function boot() {
   load()
 }
 
+/** 渠道管理面板：渠道注册表 upsert（名称/启停/上报开关/排序），admin key 持有者可见 */
+function renderChannelAdmin() {
+  if (!cfg || !cfg.key) return
+  const panel = $('ch-admin')
+  if (!panel) return
+  panel.style.display = 'block'
+  const list = $('ch-admin-list')
+  list.innerHTML = ''
+  PLATFORMS.forEach(p => {
+    const row = document.createElement('div')
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px dashed rgba(126,200,227,.15)'
+    row.innerHTML = `
+      <span style="width:9.5em;color:#FFD966;font-size:.8em">${p.icon || ''} ${esc(p.key)}</span>
+      <input data-f="name" value="${esc(p.label)}" style="flex:1;min-width:7em" title="展示名" />
+      <label style="margin:0;display:flex;align-items:center;gap:4px;font-size:.75em;white-space:nowrap"><input type="checkbox" data-f="enabled" ${p.enabled !== false ? 'checked' : ''} style="width:auto"/> 启用</label>
+      <label style="margin:0;display:flex;align-items:center;gap:4px;font-size:.75em;white-space:nowrap"><input type="checkbox" data-f="reportEnabled" ${p.reportEnabled !== false ? 'checked' : ''} style="width:auto"/> 可上报</label>
+      <input data-f="order" value="${Number(p.order) || 0}" style="width:4em" title="排序" />
+      <button class="btn" data-save style="margin-top:0;padding:5px 14px;font-size:.78em">保存</button>`
+    row.querySelector('[data-save]').onclick = () => postChannel({
+      action: 'channel', key: cfg.key, channelKey: p.key,
+      name: row.querySelector('[data-f=name]').value.trim() || p.key,
+      enabled: row.querySelector('[data-f=enabled]').checked,
+      reportEnabled: row.querySelector('[data-f=reportEnabled]').checked,
+      order: Number(row.querySelector('[data-f=order]').value) || 0
+    })
+    list.appendChild(row)
+  })
+}
+
+async function postChannel(body) {
+  try {
+    const r = await fetch(cfg.apiBase + '/', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    })
+    const d = await r.json()
+    if (!d.ok) throw new Error(d.error || '保存失败')
+    await syncChannels()
+    if (CUR_PLATFORM || VIEW_ALL) render(); else renderHome(lastRows)
+  } catch (e) { alert('保存失败：' + e.message) }
+}
+
 $('btn-save').onclick = () => {
   const base = $('in-base').value.trim().replace(/\/+$/, '')
   const key = $('in-key').value.trim()
@@ -648,6 +823,13 @@ $('btn-save').onclick = () => {
   boot()
 }
 $('btn-refresh').onclick = load
+$('ch-add').onclick = () => {
+  const key = $('ch-new-key').value.trim()
+  const name = $('ch-new-name').value.trim()
+  if (!/^[a-z0-9_]{2,20}$/.test(key)) { alert('渠道 key 需为小写字母/数字/下划线，2-20 位'); return }
+  postChannel({ action: 'channel', key: cfg.key, channelKey: key, name: name || key, enabled: true, reportEnabled: true, order: 99 })
+    .then(() => { $('ch-new-key').value = ''; $('ch-new-name').value = '' })
+}
 $('btn-export').onclick = () => {
   if (!allRows.length) { alert('暂无数据可导出'); return }
   // UTF-8 BOM，保证 Excel 打开中文不乱码
