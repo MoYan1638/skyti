@@ -61,6 +61,9 @@
   .rec-main b { color:#fff; font-weight:normal; }
   .rec-main em { font-style:normal; color:var(--dim); }
   .rec-main i { font-style:normal; color:#7EC8E3; }
+  /* 账号档案（抖音端授权后有）：小头像 + 昵称；web 端无档案保持匿名 uid */
+  .rec-av { width:1.5em; height:1.5em; border-radius:50%; vertical-align:-0.35em; margin-right:.35em; object-fit:cover; }
+  .rec-nick { color:#FFD966; }
   .rec-fb { display:block; color:#a8b8d8; font-size:.92em; margin-top:2px; }
   .rec-detail { margin-top:4px; }
   .rec-detail summary { cursor:pointer; color:#7EC8E3; font-size:.92em; user-select:none; }
@@ -322,6 +325,14 @@ function aggregate(rows) {
   return Object.entries(m).sort((a, b) => b[1].n - a[1].n)
 }
 
+/** 账号档案片段：有昵称/头像（抖音端授权）就展示，否则回退匿名标识；头像 CDN 防盗链时静默隐藏 */
+function profileHtml(r) {
+  if (!r.nickname && !r.avatar) return ''
+  const av = r.avatar ? `<img class="rec-av" src="${esc(r.avatar)}" onerror="this.style.display='none'" />` : ''
+  const nk = r.nickname ? `<span class="rec-nick">${esc(r.nickname)}</span>` : ''
+  return av + nk
+}
+
 function renderFeedback(rows) {
   const fbs = rows.filter(r => r.feedback && r.feedback !== '无反馈').slice(0, 10)
   const card = $('fb-card')
@@ -332,7 +343,8 @@ function renderFeedback(rows) {
   fbs.forEach(r => {
     const div = document.createElement('div')
     div.style.cssText = 'font-size:.8em;color:#c9d6ee;margin-bottom:8px;line-height:1.5'
-    div.textContent = `【${r.code} · ${VERSIONS[r.v] || r.v || '?'} · ${fmtTime(r.ts)} · ${r.uid ? '旅人 ' + String(r.uid).slice(-6) : '未标记'}】${r.feedback}`
+    const prof = profileHtml(r) || (r.uid ? '旅人 ' + String(r.uid).slice(-6) : '未标记')
+    div.innerHTML = `【${esc(r.code)} · ${esc(VERSIONS[r.v] || r.v || '?')} · ${fmtTime(r.ts)} · ${prof}】${esc(r.feedback)}`
     list.appendChild(div)
   })
 }
@@ -380,8 +392,10 @@ function recordEl(r) {
     ? `<span class="rec-fb">💬 ${esc(r.feedback)}</span>` : ''
   // 全渠道视图下每条记录标注渠道；分支页内渠道统一不必标
   const chBadge = VIEW_ALL ? ` · <i>${esc(PLAT_LABEL[platformOf(r)] || platformOf(r))}</i>` : ''
+  const prof = profileHtml(r)
+  const profBadge = prof ? ` · ${prof}` : ''
   div.innerHTML = `<span class="rec-time">${fmtTime(r.ts)}</span>
-    <span class="rec-main"><b>${esc(r.cn || '未知')}</b> <em>${esc(r.code || '')}</em> · <i>${esc(VERSIONS[r.v] || r.v || '?')}</i>${chBadge}${fb}</span>`
+    <span class="rec-main"><b>${esc(r.cn || '未知')}</b> <em>${esc(r.code || '')}</em> · <i>${esc(VERSIONS[r.v] || r.v || '?')}</i>${chBadge}${profBadge}${fb}</span>`
   // 答题明细（题目ID → 选项），点击展开逐题对照题库展示
   if (r.detail && typeof r.detail === 'object') {
     const entries = Object.entries(r.detail)
@@ -417,9 +431,11 @@ function groupEl(g, items, num) {
 
   const head = document.createElement('div')
   head.className = 'grp-head'
+  // 组头优先展示账号档案（抖音端授权昵称/头像），无档案回退匿名旅人号
+  const prof = g.items.map(profileHtml).find(s => s) || ''
   const label = legacy
     ? '❔ 未标记（改动前的旧数据）'
-    : `👤 旅人 #${num || '?'}<span class="grp-code">${esc(g.key.slice(-6))}</span>`
+    : `👤 ${prof || ''}旅人 #${num || '?'}<span class="grp-code">${esc(g.key.slice(-6))}</span>`
   const latestType = g.items[0] && g.items[0].cn
     ? `<span class="grp-type">最近测出 ${esc(g.items[0].cn)}</span>` : ''
   head.innerHTML = `<span class="grp-arrow">▾</span>

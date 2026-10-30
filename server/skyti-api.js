@@ -144,6 +144,20 @@ const server = http.createServer((req, res) => {
     if (want && reg.channels[want]) {
       records = records.filter(r => (r.platform ? String(r.platform) : 'web') === want)
     }
+    // 关联账号档案（昵称/头像）：抖音端授权后才有，web 端无档案保持匿名 uid。
+    // 从 logins.json 取 uid → 档案映射（后写覆盖先写），挂到记录上下发给看板展示；仅 stats（admin）下发。
+    const profOf = {}
+    for (const l of loadLogins()) {
+      if (l && l.uid && (l.nickname || l.avatar)) {
+        profOf[String(l.uid)] = { nickname: String(l.nickname || ''), avatar: String(l.avatar || '') }
+      }
+    }
+    if (Object.keys(profOf).length) {
+      records = records.map(r => {
+        const p = r.uid && profOf[String(r.uid)]
+        return p ? Object.assign({}, r, { nickname: p.nickname, avatar: p.avatar }) : r
+      })
+    }
     return send(res, 200, { ok: true, records })
   }
 
@@ -362,6 +376,32 @@ const server = http.createServer((req, res) => {
         })
       }).on('error', () => finish(''))
       return
+    }
+
+    if (data.action === 'profile') {
+      // 昵称/头像档案：抖音端 tt.getUserProfile 用户授权后上报（web 端不上报、保持匿名 uid）。
+      // uid 维度 upsert（同一 uid 多次授权以最新为准），存 logins.json 与 openid 绑定同处；
+      // 昵称最长 40 字、头像 URL 最长 500，白名单截断防滥用。隐私指引已声明「抖音账号数据」。
+      const uid = String(data.uid || '').slice(0, 24)
+      const nickname = String(data.nickname || '').slice(0, 40)
+      const avatar = String(data.avatar || '').slice(0, 500)
+      if (!uid) return send(res, 400, { ok: false, error: 'missing uid' })
+      if (!nickname && !avatar) return send(res, 400, { ok: false, error: 'missing profile' })
+      const logins = loadLogins()
+      let rec = null
+      for (let i = logins.length - 1; i >= 0; i--) {
+        if (logins[i] && logins[i].uid === uid && (logins[i].nickname || logins[i].avatar)) { rec = logins[i]; break }
+      }
+      if (rec) {
+        if (nickname) rec.nickname = nickname
+        if (avatar) rec.avatar = avatar
+        rec.pat = Date.now()
+      } else {
+        logins.push({ uid, openid: '', code: '', nickname, avatar, at: Date.now(), pat: Date.now() })
+        if (logins.length > MAX_LOGINS) logins.splice(0, logins.length - MAX_LOGINS)
+      }
+      saveLogins(logins)
+      return send(res, 200, { ok: true, saved: 1 })
     }
 
     if (data.action === 'delete') {
